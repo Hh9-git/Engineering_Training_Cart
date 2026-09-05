@@ -42,9 +42,10 @@ mx.scratch
 compile_commands.json
 
 # ==================== Debug Configuration ====================
-stlink.cfg
+# Keep debug configuration files (stlink.cfg, etc.)
 *.cfg
 !*.ioc
+!stlink.cfg
 
 # ==================== OS Generated ====================
 .DS_Store
