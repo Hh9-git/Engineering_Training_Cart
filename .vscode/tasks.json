@@ -1,0 +1,56 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/MC02/build/Debug",
+                "--config",
+                "Debug",
+                "--target",
+                "MC02",
+                "-j",
+                "$(nproc)"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Build STM32H723 project"
+        },
+        {
+            "label": "Clean",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/MC02/build/Debug",
+                "--config",
+                "Debug",
+                "--target",
+                "clean"
+            ],
+            "group": "build",
+            "problemMatcher": ["$gcc"],
+            "detail": "Clean build artifacts"
+        },
+        {
+            "label": "Flash",
+            "type": "shell",
+            "command": "openocd",
+            "args": [
+                "-f",
+                "${workspaceFolder}/MC02/stlink.cfg",
+                "-c",
+                "program ${workspaceFolder}/MC02/build/Debug/MC02.elf verify reset exit"
+            ],
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Flash firmware to STM32H723"
+        }
+    ]
+}

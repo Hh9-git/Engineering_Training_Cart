@@ -1,0 +1,36 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "STM32H723 Debug",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "openocd",
+            "configFiles": [
+                "${workspaceFolder}/MC02/stlink.cfg"
+            ],
+            "executable": "${workspaceFolder}/MC02/build/Debug/MC02.elf",
+            "runToEntryPoint": "main",
+            "device": "STM32H723VGT6",
+            "svdFile": "${workspaceFolder}/MC02/Drivers/CMSIS/SVD/STM32H723.svd",
+            "preLaunchTask": "Build",
+            "postDebugTask": "",
+            "cwd": "${workspaceFolder}",
+            "gdbPath": "arm-none-eabi-gdb"
+        },
+        {
+            "name": "STM32H723 Attach",
+            "type": "cortex-debug",
+            "request": "attach",
+            "servertype": "openocd",
+            "configFiles": [
+                "${workspaceFolder}/MC02/stlink.cfg"
+            ],
+            "executable": "${workspaceFolder}/MC02/build/Debug/MC02.elf",
+            "device": "STM32H723VGT6",
+            "svdFile": "${workspaceFolder}/MC02/Drivers/CMSIS/SVD/STM32H723.svd",
+            "cwd": "${workspaceFolder}",
+            "gdbPath": "arm-none-eabi-gdb"
+        }
+    ]
+}
