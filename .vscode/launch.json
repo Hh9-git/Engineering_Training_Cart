@@ -1,6 +1,29 @@
 {
     "version": "0.2.0",
     "configurations": [
+        
+        {
+            "cwd": "${workspaceRoot}",
+            "executable": "./bin/executable.elf",
+            "name": "Debug with OpenOCD",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "configFiles": [],
+            "searchDir": [],
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "none"
+        },
+        {
+            "cwd": "${workspaceFolder}",
+            "executable": "./bin/executable.elf",
+            "name": "Debug with ST-Util",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "none",
+            "servertype": "stutil"
+        },
         {
             "name": "STM32H723 Debug",
             "type": "cortex-debug",
@@ -16,7 +39,7 @@
             "preLaunchTask": "Build",
             "postDebugTask": "",
             "cwd": "${workspaceFolder}",
-            "gdbPath": "arm-none-eabi-gdb"
+            "gdbPath": "gdb-multiarch"
         },
         {
             "name": "STM32H723 Attach",
@@ -30,7 +53,7 @@
             "device": "STM32H723VGT6",
             "svdFile": "${workspaceFolder}/MC02/Drivers/CMSIS/SVD/STM32H723.svd",
             "cwd": "${workspaceFolder}",
-            "gdbPath": "arm-none-eabi-gdb"
+            "gdbPath": "gdb-multiarch"
         }
     ]
 }
