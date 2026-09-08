@@ -1,3 +1,31 @@
-build
+# Build output
+build/
+
+# STM32CubeIDE auto-generated files
+.clangd
+.mxproject
+.settings/bundles-lock.store.json
+.settings/bundles.store.json
+
+# VS Code auto-generated files
+.vscode/c_cpp_properties.json
+
+# Build artifacts
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+
+# Debug logs
+*.log
+openocd.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# STM32CubeMX scratch
 mx.scratch
-!.settings
