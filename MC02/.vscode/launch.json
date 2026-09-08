@@ -19,6 +19,22 @@
             "showDevDebugOutput": "raw"
         },
         {
+            "name": "STM32H723 DAPLink",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/MC02.elf",
+            "serverpath": "openocd",
+            "servertype": "openocd",
+            "configFiles": [
+                "${workspaceFolder}/daplink.cfg"
+            ],
+            "svdFile": "${workspaceFolder}/STM32H723.svd",
+            "gdbPath": "D:/STM32toolchain/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin/arm-none-eabi-gdb.exe",
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "raw"
+        },
+        {
             "name": "STM32H723 ST-LINK Server",
             "type": "stlinkgdbtarget",
             "request": "launch",
