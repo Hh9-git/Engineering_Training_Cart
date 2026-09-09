@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
+#include "dvc_vofa.h"
 
 /* USER CODE END Includes */
 
@@ -105,8 +105,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-   CDC_Transmit_HS((uint8_t *)"Hello World!\r\n", 14);
-   HAL_Delay(1000);
+    vofa_demo();
+  
   }
   /* USER CODE END 3 */
 }

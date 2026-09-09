@@ -42,14 +42,25 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
+# Collect all user source files
+file(GLOB_RECURSE USER_SOURCES ${CMAKE_SOURCE_DIR}/User_File/*.c)
+
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
+    ${USER_SOURCES}
 )
+
+# Collect all user include directories
+file(GLOB_RECURSE USER_HEADERS ${CMAKE_SOURCE_DIR}/User_File/*.h)
+foreach(HEADER ${USER_HEADERS})
+    get_filename_component(DIR ${HEADER} DIRECTORY)
+    list(APPEND USER_INCLUDE_DIRS ${DIR})
+endforeach()
+list(REMOVE_DUPLICATES USER_INCLUDE_DIRS)
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined include paths
+    ${USER_INCLUDE_DIRS}
 )
 
 # Add project symbols (macros)
