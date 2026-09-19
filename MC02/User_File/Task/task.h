@@ -2,6 +2,7 @@
 #define TASK_H
 
 #include "main.h"
+#include "usart.h"
 
 #include "bsp_can.h"
 

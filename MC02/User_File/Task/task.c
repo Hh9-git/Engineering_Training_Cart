@@ -11,15 +11,21 @@ void Task_Init(void)
 
 void Task_Loop(void)
 {
-    	fdcanx_send_data(&hfdcan1, 0x520, tx_data, 8);
-		HAL_Delay(100);
 
-	    fdcanx_send_data(&hfdcan2, 0x521, tx_data, 8);
-		HAL_Delay(100);
 
-		// fdcanx_send_data(&hfdcan3, 0x520, tx_data, 8);
+	    // vofa_demo();
+
+		HAL_UART_Transmit(&huart1, tx_data, 8, 1000);
+
+    	// fdcanx_send_data(&hfdcan1, 0x520, tx_data, 8);
 		// HAL_Delay(100);
+
+	    // fdcanx_send_data(&hfdcan2, 0x521, tx_data, 8);
+		// HAL_Delay(100);
+
+		// // fdcanx_send_data(&hfdcan3, 0x520, tx_data, 8);
+		// // HAL_Delay(100);
        
-        //    vofa_start();
-        HAL_GPIO_WritePin(GPIOC,GPIO_PIN_15, GPIO_PIN_SET);
+        // //    vofa_start();
+        // HAL_GPIO_WritePin(GPIOC,GPIO_PIN_15, GPIO_PIN_SET);
 }
