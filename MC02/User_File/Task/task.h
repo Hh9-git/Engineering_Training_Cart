@@ -7,7 +7,8 @@
 #include "bsp_can.h"
 
 #include "dvc_vofa.h"
-
+#include "drv_usart.h"
+#include "drv_can.h"
 
 void Task_Init(void);
 void Task_Loop(void);

@@ -42,8 +42,8 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
-# Collect all user source files
-file(GLOB_RECURSE USER_SOURCES ${CMAKE_SOURCE_DIR}/User_File/*.c)
+# Collect all user source files (re-globbed automatically at build time)
+file(GLOB_RECURSE USER_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/User_File/*.c)
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -51,7 +51,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Collect all user include directories
-file(GLOB_RECURSE USER_HEADERS ${CMAKE_SOURCE_DIR}/User_File/*.h)
+file(GLOB_RECURSE USER_HEADERS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/User_File/*.h)
 foreach(HEADER ${USER_HEADERS})
     get_filename_component(DIR ${HEADER} DIRECTORY)
     list(APPEND USER_INCLUDE_DIRS ${DIR})
