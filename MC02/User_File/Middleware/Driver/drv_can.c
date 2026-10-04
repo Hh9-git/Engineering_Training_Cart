@@ -4,11 +4,11 @@
 //----------------------BSP_FDCAN----------------------//
 #ifdef HAL_FDCAN_MODULE_ENABLED
 
- /*使用局部变量，避免静态全局变量互相覆盖*/
-    FDCAN_TxHeaderTypeDef FDCAN_TxHeader;
+/*FDCAN的标准数据帧格式*/
 void FDCAN_Transmit(FDCAN_HandleTypeDef *hfdcan, uint16_t ID, uint8_t *Buf)
 {
-   
+    /*使用局部变量，避免静态全局变量互相覆盖*/
+    FDCAN_TxHeaderTypeDef FDCAN_TxHeader;
     if ((Buf != NULL))
     {
         FDCAN_TxHeader.Identifier = ID;                         // 目标ID
@@ -26,6 +26,60 @@ void FDCAN_Transmit(FDCAN_HandleTypeDef *hfdcan, uint16_t ID, uint8_t *Buf)
 }
 #endif /* HAL_FDCAN_MODULE_ENABLED */
 
+/*FDCAN的扩展帧格式*/
+void FDCAN_Transmit_Ext(FDCAN_HandleTypeDef *hfdcan, uint32_t ID, uint8_t *Buf, uint32_t DataLength)
+{
+    FDCAN_TxHeaderTypeDef FDCAN_TxHeader;
+    if ((Buf != NULL))
+    {
+        FDCAN_TxHeader.Identifier = ID;
+        FDCAN_TxHeader.IdType = FDCAN_EXTENDED_ID;
+        FDCAN_TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+        FDCAN_TxHeader.DataLength = DataLength;                     // 由调用者指定
+        FDCAN_TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+        FDCAN_TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
+        FDCAN_TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
+        FDCAN_TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+        FDCAN_TxHeader.MessageMarker = 0;
+
+        HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &FDCAN_TxHeader, Buf);
+    }
+}
+
+/*FDCAN扩展帧多帧发送（自动分包）*/
+void FDCAN_SendCmd_Ext(FDCAN_HandleTypeDef *hfdcan, uint8_t *cmd, uint8_t len)
+{
+    /*i:已发送字节数, j:有效数据总长, k:剩余字节, packNum:包序号*/
+    uint8_t i = 0, j = 0, k = 0, l = 0, packNum = 0;
+    uint8_t txData[8];
+
+    // 计算有效数据长度（去掉cmd[0]地址和最后一个校验字节）
+    j = len - 2;
+
+    // 循环发送所有数据
+    while (i < j)
+    {
+        // 剩余待发送字节
+        k = j - i;
+
+        txData[0] = cmd[1];                // 命令码
+
+        // 剩余不足8字节：发最后一包
+        if (k < 8)
+        {
+            for (l = 0; l < k; l++, i++) { txData[l + 1] = cmd[i + 2]; }
+            FDCAN_Transmit_Ext(hfdcan, ((uint32_t)cmd[0] << 8) | packNum, txData, k + 1);
+        }
+        // 剩余超过8字节：发满7字节有效数据
+        else
+        {
+            for (l = 0; l < 7; l++, i++) { txData[l + 1] = cmd[i + 2]; }
+            FDCAN_Transmit_Ext(hfdcan, ((uint32_t)cmd[0] << 8) | packNum, txData, 8);
+        }
+
+        packNum++;
+    }
+}
 
 //--------------------------------------------------------------------------------------------------------------------
 // FDCAN Interrupt
@@ -61,6 +115,36 @@ inline void FDCAN_FilterInit(FDCAN_HandleTypeDef *hfdcan)
     HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_ARB_PROTOCOL_ERROR, 0);//多个节点同时发送引起的位错误（仲裁失败）、格式错，诊断用
     
 }
+
+
+/**
+  * @brief    FDCAN扩展帧过滤器 - 全通模式
+  * @param    hfdcan : FDCAN句柄
+  * @retval   无
+  */
+void FDCAN_FilterInit_Ext(FDCAN_HandleTypeDef *hfdcan)
+{
+    FDCAN_FilterTypeDef FDCAN_FilterInitStructure;
+
+    /*全通滤波器 - 接收所有扩展帧*/
+    FDCAN_FilterInitStructure.IdType = FDCAN_EXTENDED_ID;            // 扩展ID
+    FDCAN_FilterInitStructure.FilterIndex = 0;                        // 过滤器索引
+    FDCAN_FilterInitStructure.FilterType = FDCAN_FILTER_MASK;         // 掩码模式
+    FDCAN_FilterInitStructure.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; // 关联FIFO0
+    FDCAN_FilterInitStructure.FilterID1 = 0x00000000;                 // 全通
+    FDCAN_FilterInitStructure.FilterID2 = 0x00000000;                 // 全通掩码
+    HAL_FDCAN_ConfigFilter(hfdcan, &FDCAN_FilterInitStructure);
+
+    /*使能FDCAN硬件中断*/
+    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_TX_EVT_FIFO_ELT_LOST, 0);
+    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RAM_ACCESS_FAILURE, 0);
+    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_DATA_PROTOCOL_ERROR, 0);
+    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_ARB_PROTOCOL_ERROR, 0);
+}
+
+
+
 
 // 联接CAN中断源和中断回调函数，
 void AttachInterrupt_FDCAN(FDCAN_HandleTypeDef *hfdcan, void (*FDCAN_Callback)(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf))
