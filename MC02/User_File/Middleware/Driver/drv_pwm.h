@@ -1,7 +1,7 @@
 #ifndef DRV_PWM_H
 #define DRV_PWM_H
 
-#include "tim.h"
+#include "main.h"
 
 void PWM_Init(void);
 void PWM_SetDuty(void);

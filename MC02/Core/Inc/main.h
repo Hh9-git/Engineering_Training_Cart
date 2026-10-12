@@ -32,6 +32,14 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "fdcan.h"
+#include "tim.h"
+/* 一、引用标准输入输出库 */
+#include <stdio.h>
+#include "FreeRTOS.h"  
+#include "queue.h"
+#include "cmsis_os2.h"          /* osDelay */
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
