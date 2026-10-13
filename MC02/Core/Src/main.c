@@ -110,6 +110,7 @@ int main(void)
   MX_TIM2_Init();
   MX_SPI1_Init();
   MX_SPI6_Init();
+  MX_TIM12_Init();
   /* USER CODE BEGIN 2 */
 
 

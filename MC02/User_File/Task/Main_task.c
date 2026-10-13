@@ -1,5 +1,5 @@
 #include "Main_task.h"
-#include "dvc_lcd.h"
+
 
 #include "dvc_vofa.h"
 #include "dvc_stepmotor.h"
@@ -11,11 +11,6 @@ uint8_t tx_data[8] = {0,1,2,3,4,5,6,7};
 
 void Main_Init(void)
 {
-
-	LCD_Init();
-
-	/* 初始化后 ST7789 显存内容是不确定的，先清一次屏，否则周围会有花屏 */
-	LCD_Fill(0, 0, LCD_W - 1, LCD_H - 1, BLACK);
 
 // 	// PWM_Init();
 // 	// HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
@@ -54,7 +49,7 @@ void Main_Task(void *argument)
 	for (;;)
 	{
 
-		 LCD_ShowString(120, 72,(uint8_t *)"dmBot", BRRED, BLACK, 24, 0);
+		 
 		// Servo_SetAngle_90(&htim1, TIM_CHANNEL_1, 45);        // PE9 转 45°
 		// Servo_SetAngle_90(&htim1, TIM_CHANNEL_3, -90);       // PE13 转 -90°
 		// Servo_SetAngle_90(&htim2, TIM_CHANNEL_1, 0);         // PA0 回中

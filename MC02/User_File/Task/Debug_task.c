@@ -1,6 +1,7 @@
 #include "Debug_task.h"
 #include "dvc_stepmotor.h"
 #include "bsp_ws2812.h"
+#include "bsp_buzzer.h"
 
 /* 彩色渐变：色相每帧推进 2 度，10ms 一帧 -> 1.8s 走完一圈 */
 #define WS2812_HUE_STEP     2U
@@ -26,6 +27,10 @@ void Debug_Task(void *argument)
     __set_BASEPRI(0U);
 
     Debug_Init();
+
+    /* 启动提示音：上行三音琶音，表示系统就绪 */
+    Buzzer_Init();
+    Buzzer_StartupSound();
 
     uint16_t hue = 0;
 

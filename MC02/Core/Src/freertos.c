@@ -83,6 +83,13 @@ const osThreadAttr_t Debug_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for Lcd */
+osThreadId_t LcdHandle;
+const osThreadAttr_t Lcd_attributes = {
+  .name = "Lcd",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -94,6 +101,7 @@ void Chassis_Task(void *argument);
 void Tower_Task(void *argument);
 void Main_Task(void *argument);
 void Debug_Task(void *argument);
+void Lcd_Task(void *argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -159,6 +167,9 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of Debug */
   DebugHandle = osThreadNew(Debug_Task, NULL, &Debug_attributes);
+
+  /* creation of Lcd */
+  LcdHandle = osThreadNew(Lcd_Task, NULL, &Lcd_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* 恢复中断使能。上面每一次 osThreadNew 都会经由 pvPortMalloc /
@@ -286,6 +297,24 @@ __weak void Debug_Task(void *argument)
     osDelay(1);
   }
   /* USER CODE END Debug_Task */
+}
+
+/* USER CODE BEGIN Header_Lcd_Task */
+/**
+* @brief Function implementing the Lcd thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Lcd_Task */
+__weak void Lcd_Task(void *argument)
+{
+  /* USER CODE BEGIN Lcd_Task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END Lcd_Task */
 }
 
 /* Private application code --------------------------------------------------*/
