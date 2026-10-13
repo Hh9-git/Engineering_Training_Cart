@@ -19,5 +19,6 @@ void Emm_V5_Angle_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, 
 
 
 
+void ZDT_CAN_Callback(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf);
 
 #endif // DVC_STEPMOTOR_H   

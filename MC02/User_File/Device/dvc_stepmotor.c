@@ -150,3 +150,15 @@ void Emm_V5_Stop_Now(uint8_t addr, bool snF)
 
     FDCAN_Transmit_Ext(&hfdcan1, ((uint32_t)addr << 8), cmd, FDCAN_DLC_BYTES_4);
 }
+
+
+
+
+
+void ZDT_CAN_Callback(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf)
+{
+    (void)pHeader;
+    (void)pBuf;
+    // 处理接收到的CAN报文
+    // 可以在这里添加对接收到的报文的处理逻辑
+}
