@@ -15,6 +15,9 @@ void Servo_Init(void)
          Set_Claw_Angle(claw.start_angle);
          Set_Gimbal_Angle(gimbal.start_angle);
          Set_Tray_Angle(tray.start_angle);
+
+         //开启舵机5v电源
+         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
 }
 
 

@@ -52,8 +52,6 @@ void Lcd_Init(void)
 
 void Lcd_Task(void *argument)
 {
-    (void)argument;
-
     Lcd_Init();
     for (;;)
     {

@@ -16,7 +16,6 @@ extern Servo_t claw;
 extern Servo_t gimbal;
 extern Servo_t tray;
 
-/* 各舵机的角度入口，会被挂到上面的 SetServoAngle 函数指针上 */
 void Set_Claw_Angle(float angle);
 void Set_Gimbal_Angle(float angle);
 void Set_Tray_Angle(float angle);

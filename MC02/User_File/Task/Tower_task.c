@@ -13,6 +13,7 @@ void Tower_Init(void)
     //  //夹爪伸出0缩回1
     // Emm_V5_Angle_Control(6,0, 1000, 0, 45, 0, false);
     //  osDelay(100); 
+    
     Servo_Init();
 }
 

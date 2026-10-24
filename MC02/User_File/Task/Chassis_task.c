@@ -2,8 +2,6 @@
 #include "dvc_stepmotor.h"
 
 
-
-
 void Chassis_Init(void)
 {
 

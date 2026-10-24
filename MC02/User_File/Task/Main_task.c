@@ -1,14 +1,14 @@
 #include "Main_task.h"
-
 #include "dvc_vofa.h"
 #include "dvc_stepmotor.h"
-#include "dvc_servo.h"
+#include "bsp_buzzer.h"
 
-uint8_t tx_data[8] = {0,1,2,3,4,5,6,7};
 
 void Main_Init(void)
 {
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
+	/* 启动提示音：上行三音琶音，表示系统就绪 */
+    Buzzer_Init();
+    Buzzer_StartupSound();
 }
 
 void Main_Task(void *argument)
