@@ -28,7 +28,11 @@ void LCD_Writ_Bus(uint8_t dat)
 		dat<<=1;
 	}
 #else
-	HAL_SPI_Transmit(&hspi1, &dat, 1, 0xffff);
+	/* 超时原为 0xffff(65535ms)。SPI 一旦工作不正常，发一个字节就卡 65 秒，
+	 * LCD_Fill 要发 13.4 万字节，等于把 CPU 永久锁死；而 Lcd_Task 是
+	 * osPriorityLow 且与其它任务同优先级，会连带饿死蜂鸣器/彩灯/IMU。
+	 * 30MHz 下一个字节只要不到 1us，10ms 已经绰绰有余。 */
+	HAL_SPI_Transmit(&hspi1, &dat, 1, 10);
 #endif	
   LCD_CS_Set();	
 }
@@ -276,7 +280,7 @@ void LCD_ShowString(uint16_t x,uint16_t y,const uint8_t *p,uint16_t fc,uint16_t 
 **/
 void LCD_ShowFloatNum(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc, uint8_t sizey)
 {
-		int16_t num_int;
+		int32_t num_int;
 		uint8_t t, temp, sizex;
     sizex = sizey / 2;
     num_int = num * mypow(10, decimal);

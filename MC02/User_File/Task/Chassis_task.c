@@ -1,21 +1,27 @@
 #include "Chassis_task.h"
+#include "dvc_stepmotor.h"
+
+
+
 
 void Chassis_Init(void)
 {
 
-
-
-    // HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
-    // Initialization code for the Chassis task can be added here
+    AttachInterrupt_FDCAN(&hfdcan1, ZDT_CAN_Callback);
+    // Emm_V5_En_Control(2, true, true);                 // 使能电机
+    osDelay(500);
 }
 
 void Chassis_Task(void *argument)
 {
+    (void)argument;
     Chassis_Init();
-    // Main loop for the Chassis task
-    while (1)
+
+  
+    for (;;)
     {
-        // Add the functionality for the Chassis task here
-        osDelay(100); // Delay to prevent busy waiting
+        
+        osDelay(10);
     }
 }
+

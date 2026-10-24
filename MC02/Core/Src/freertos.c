@@ -59,8 +59,8 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t ChassisHandle;
 const osThreadAttr_t Chassis_attributes = {
   .name = "Chassis",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for Tower */
 osThreadId_t TowerHandle;
@@ -90,6 +90,20 @@ const osThreadAttr_t Lcd_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for Key */
+osThreadId_t KeyHandle;
+const osThreadAttr_t Key_attributes = {
+  .name = "Key",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for IMU */
+osThreadId_t IMUHandle;
+const osThreadAttr_t IMU_attributes = {
+  .name = "IMU",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -102,6 +116,8 @@ void Tower_Task(void *argument);
 void Main_Task(void *argument);
 void Debug_Task(void *argument);
 void Lcd_Task(void *argument);
+void Key_Task(void *argument);
+void IMU_Task(void *argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -170,6 +186,12 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of Lcd */
   LcdHandle = osThreadNew(Lcd_Task, NULL, &Lcd_attributes);
+
+  /* creation of Key */
+  KeyHandle = osThreadNew(Key_Task, NULL, &Key_attributes);
+
+  /* creation of IMU */
+  IMUHandle = osThreadNew(IMU_Task, NULL, &IMU_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* 恢复中断使能。上面每一次 osThreadNew 都会经由 pvPortMalloc /
@@ -315,6 +337,42 @@ __weak void Lcd_Task(void *argument)
     osDelay(1);
   }
   /* USER CODE END Lcd_Task */
+}
+
+/* USER CODE BEGIN Header_Key_Task */
+/**
+* @brief Function implementing the Key thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Key_Task */
+__weak void Key_Task(void *argument)
+{
+  /* USER CODE BEGIN Key_Task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END Key_Task */
+}
+
+/* USER CODE BEGIN Header_IMU_Task */
+/**
+* @brief Function implementing the IMU thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_IMU_Task */
+__weak void IMU_Task(void *argument)
+{
+  /* USER CODE BEGIN IMU_Task */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END IMU_Task */
 }
 
 /* Private application code --------------------------------------------------*/

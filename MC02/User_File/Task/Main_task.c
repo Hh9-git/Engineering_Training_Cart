@@ -4,6 +4,8 @@
 #include "dvc_vofa.h"
 #include "dvc_stepmotor.h"
 #include "dvc_servo.h"
+#include "stm32h7xx_hal_tim.h"
+#include "tim.h"
 
 
 uint8_t tx_data[8] = {0,1,2,3,4,5,6,7};
@@ -13,9 +15,9 @@ void Main_Init(void)
 {
 
 // 	// PWM_Init();
-// 	// HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
-// 	Servo_Init();
-// 	// Servo_SetAngle_90(&htim1, TIM_CHANNEL_1, 0);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
+	Servo_Init();
+// 	// Servo_SetAngle(&htim1, TIM_CHANNEL_1, 0);
 
 //     osDelay(1000);                                    // 等舵机/电机上电稳定
 
@@ -42,19 +44,19 @@ void Main_Init(void)
 
 void Main_Task(void *argument)
 {
-	(void)argument;
-
 	Main_Init();
 
 	for (;;)
 	{
 
-		 
-		// Servo_SetAngle_90(&htim1, TIM_CHANNEL_1, 45);        // PE9 转 45°
-		// Servo_SetAngle_90(&htim1, TIM_CHANNEL_3, -90);       // PE13 转 -90°
-		// Servo_SetAngle_90(&htim2, TIM_CHANNEL_1, 0);         // PA0 回中
-		// Servo_SetPulse(&htim2, TIM_CHANNEL_3, 2000);
-		//	Servo_SetAngle_90(&htim1, TIM_CHANNEL_1, 60);
+		//tray
+		Servo_SetAngle(&htim1,TIM_CHANNEL_1, -135);      
+
+
+		//claw
+		Servo_SetAngle(&htim2,TIM_CHANNEL_1, 90);         
+		//gimbal
+		Servo_SetAngle(&htim2,TIM_CHANNEL_3,-0);       
 
 		osDelay(10);
 	}

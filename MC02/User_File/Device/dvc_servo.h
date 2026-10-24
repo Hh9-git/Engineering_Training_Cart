@@ -6,7 +6,7 @@
 
 
 void Servo_Init(void);
-void Servo_SetAngle_90(TIM_HandleTypeDef *htim, uint32_t channel, int16_t angle);
+void Servo_SetAngle(TIM_HandleTypeDef *htim, uint32_t channel, int16_t angle);
 void Servo_SetPulse(TIM_HandleTypeDef *htim, uint32_t channel, uint16_t us);
 
 #endif // DVC_SERVO_H

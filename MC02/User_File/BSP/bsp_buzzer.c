@@ -77,3 +77,25 @@ void Buzzer_StartupSound(void)
         osDelay(35U);
     }
 }
+
+void Buzzer_CalibrationDoneSound(void)
+{
+    /* 标定完成提示音。必须和启动音一耳朵分得开，否则上电时那声琶音一响，
+     * 就不知道是"开机"还是"标定好了"。三个维度都刻意错开：
+     *   音区 —— E6(1319Hz) 比启动音最高的 C6(1047Hz) 还高，整段都在启动音之上
+     *   节奏 —— 两声短促的相同音，不是四个音的上行级进
+     *   时长 —— 约 0.33s，只有启动音(0.72s)的一半
+     * 听感是干脆的"嘀-嘀"，表示操作完成。 */
+    static const uint16_t note_hz[] = { 1319U, 1319U };   /* E6, E6 */
+    static const uint16_t note_ms[] = {   80U,  180U };
+
+    for (uint32_t i = 0; i < (sizeof(note_hz) / sizeof(note_hz[0])); i++)
+    {
+        Buzzer_SetTone(note_hz[i]);
+        osDelay(note_ms[i]);
+
+        Buzzer_Off();
+        osDelay(35U);
+    }
+}
+

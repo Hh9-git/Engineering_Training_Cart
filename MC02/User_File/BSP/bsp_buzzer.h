@@ -16,4 +16,10 @@ void Buzzer_SetTone(uint16_t freq_hz);
  * 调用前要先 Buzzer_Init()。 */
 void Buzzer_StartupSound(void);
 
+/* IMU 陀螺零偏标定完成提示音：两声短促的 E6，听感是"完成"。
+ * 音区/节奏/时长都和启动音刻意错开，不会听混。
+ * 阻塞约 0.33s（内部用 osDelay），必须在任务里调用；
+ * 调用前要先 Buzzer_Init()。 */
+void Buzzer_CalibrationDoneSound(void);
+
 #endif /* BSP_BUZZER_H */
