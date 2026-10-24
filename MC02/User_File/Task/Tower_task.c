@@ -1,5 +1,6 @@
 #include "Tower_task.h"
 #include "dvc_stepmotor.h"
+#include "dvc_servo.h"
 
 void Tower_Init(void)
 {
@@ -12,21 +13,19 @@ void Tower_Init(void)
     //  //夹爪伸出0缩回1
     // Emm_V5_Angle_Control(6,0, 1000, 0, 45, 0, false);
     //  osDelay(100); 
-
-
-
-   
+    Servo_Init();
 }
 
 
 void Tower_Task(void *argument)
 {
     Tower_Init();
-    // Main loop for the Tower task
+  
     while (1)
     {
       
-        // Add the functionality for the Tower task here
+        Set_Claw_Angle(-90); // Set claw angle to 90 degrees
+       
         osDelay(100); // Delay to prevent busy waiting
     }
 }
