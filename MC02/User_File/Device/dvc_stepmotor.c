@@ -152,6 +152,25 @@ void Emm_V5_Stop_Now(uint8_t addr, bool snF)
 }
 
 
+/**
+  * @brief    多机同步运动，触发之前带 snF=true 接收的指令同时执行
+  * @param    addr  ：电机地址，0 为广播
+  * @retval   地址 + 功能码 + 命令状态 + 校验字节
+  */
+void Emm_V5_Synchronous_motion(uint8_t addr)
+{
+  static uint8_t cmd[8] = {0};
+
+  // 装载命令
+  cmd[0] =  addr;                       // 地址（SendCmd内部用来构建ID）
+  cmd[1] =  0xFF;                       // 功能码
+  cmd[2] =  0x66;                       // 辅助码
+  cmd[3] =  0x6B;                       // 校验字节
+
+  // 发送命令：len-2=2 字节有效数据，单包发完 → [0xFF, 0x66, 0x6B]
+  FDCAN_SendCmd_Ext(&hfdcan1, cmd, 4);
+}
+
 
 
 
@@ -159,6 +178,5 @@ void ZDT_CAN_Callback(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf)
 {
     (void)pHeader;
     (void)pBuf;
-    // 处理接收到的CAN报文
-    // 可以在这里添加对接收到的报文的处理逻辑
+
 }

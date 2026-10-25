@@ -8,6 +8,11 @@ void Chassis_Task(void *argument);
 
 void Chassis_Move(int16_t Vx, int16_t Vy, int16_t W);
 
-void Chassis_SetMotor(int16_t speed[5]);  // 设置底盘电机速度，speed[1]~speed[4] 分别对应 1~4 号电机
+void Chassis_Move_PosX(float x);
+void Chassis_Move_PosY(float y);
+
+void Chassis_SetMotor_Vel(int16_t speed[5]);  
+
+void Chassis_SetMotor_Pos(int16_t speed[5], uint32_t clk);
 
 #endif // CHASSIS_TASK_H
