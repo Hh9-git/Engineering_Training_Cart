@@ -64,20 +64,12 @@ void WS2812_CtrlHSV(uint16_t hue, uint8_t sat, uint8_t val)
     WS2812_Ctrl(r, g, b);
 }
 
-/* ---------------- 彩色渐变(呼吸灯) ---------------- */
 
-/* 色相每帧推进 2 度。帧间隔(WS2812_BREATH_FRAME_MS)在头文件里，
- * 由调用者的循环负责节拍；两者一起改才能保持"1.8s 走完一圈"。 */
 #define WS2812_HUE_STEP     2U
 #define WS2812_SAT          255U
 #define WS2812_VAL          150U
 
-/**
-  * @brief  彩色渐变的一帧（"呼吸灯"）
-  * @note   不自带延时，画完立即返回。由调用者的任务循环负责节拍：
-  *             for (;;) { WS2812_BreathStep(); osDelay(WS2812_BREATH_FRAME_MS); }
-  *         这样调用它的任务在帧之间还能做别的事。
-  */
+
 void WS2812_BreathStep(void)
 {
     static uint16_t hue = 0U;
