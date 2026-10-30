@@ -33,8 +33,8 @@ enable_language(C ASM)
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME}
-    User_File/Middleware/Algorithm/PID.c
-    User_File/Middleware/Algorithm/PID.h)
+    User_File/Middleware/Algorithm/alg_pid.c
+    User_File/Middleware/Algorithm/alg_pid.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)

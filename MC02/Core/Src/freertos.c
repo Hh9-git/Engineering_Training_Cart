@@ -194,13 +194,7 @@ void MX_FREERTOS_Init(void) {
   IMUHandle = osThreadNew(IMU_Task, NULL, &IMU_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* 恢复中断使能。上面每一次 osThreadNew 都会经由 pvPortMalloc /
-   * prvAddNewTaskToReadyList 进入临界区，而调度器启动前 port.c 里
-   * uxCriticalNesting 的初值是 0xaaaaaaaa（"未启动"哨兵值），
-   * vPortExitCritical() 退出时永远回不到 0，portENABLE_INTERRUPTS()
-   * 不会执行 —— BASEPRI 被永久抬到 0x50，屏蔽所有优先级 >= 5 的中断，
-   * 而 TIM23(HAL 时基) 和 SysTick 都是优先级 15。
-   * 后果就是 HAL_Delay 永久卡死、FreeRTOS 心跳不走、系统整体冻结。 */
+
   __set_BASEPRI(0U);
 
   /* 品红常亮 = 有任务返回 NULL（堆不够）。osThreadNew 失败时既不报错也不跑，
@@ -231,14 +225,7 @@ void StartDefaultTask(void *argument)
   /* init code for USB_DEVICE */
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN StartDefaultTask */
-  /* 必须在这里再清一次 BASEPRI：vTaskStartScheduler() 为 idle/timer 任务做
-   * pvPortMalloc 时又把它抬起来了，而 xPortStartScheduler() 只把
-   * uxCriticalNesting 归零，并不会放下 BASEPRI。
-   * BASEPRI 是内核级全局寄存器，清一次所有任务和中断就都恢复。
-   *
-   * 注意：本任务是调度器启动后第一个运行的（优先级 24，最高），所以它是
-   * 唯一能保证执行到这里的任务。如果以后改了任务优先级，要保证仍然有
-   * 某个最早运行的任务执行这句清理，否则整个系统会再次冻结。 */
+
   __set_BASEPRI(0U);
 
   /* Infinite loop */

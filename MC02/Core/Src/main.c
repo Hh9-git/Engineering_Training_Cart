@@ -31,6 +31,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "bsp_ws2812.h"
+#include "bsp_dwt.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -116,7 +117,8 @@ int main(void)
   MX_UART7_Init();
   MX_USART10_UART_Init();
   /* USER CODE BEGIN 2 */
-  
+  /* DWT 由 CPU 时钟(480MHz)驱动, 用 SystemCoreClock 以便时钟树变更后自动跟随 */
+  DWT_Init(SystemCoreClock / 1000000U);
   /* USER CODE END 2 */
 
   /* Init scheduler */
