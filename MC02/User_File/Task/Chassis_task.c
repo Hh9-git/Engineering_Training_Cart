@@ -1,6 +1,7 @@
 #include "Chassis_task.h"
 #include "cmsis_os2.h"
 #include "dvc_stepmotor.h"
+#include "bsp_ws2812.h"
 #include <math.h>
 #include <stdint.h>
 
@@ -55,7 +56,6 @@ int16_t  car_move_speed = 50;
 
 void Chassis_Init(void)
 {
-
     AttachInterrupt_FDCAN(&hfdcan1, ZDT_CAN_Callback);
     // Emm_V5_En_Control(2, true, true);                 // 使能电机
     osDelay(500);

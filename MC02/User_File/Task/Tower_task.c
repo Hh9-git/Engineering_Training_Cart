@@ -2,12 +2,11 @@
 #include "dvc_stepmotor.h"
 #include "dvc_servo.h"
 #include "dvc_lcd.h"
+#include "bsp_ws2812.h"
 
 
 void Tower_Init(void)
 {
-    
-
     //  Emm_V5_Angle_Control(5, 1,1000, 0, 360, 0, false);
     //  osDelay(100); 
 
@@ -15,9 +14,9 @@ void Tower_Init(void)
     //  
     // Emm_V5_Angle_Control(6,0, 1000, 0, 45, 0, false);
     //  osDelay(100); 
-    Tower_SetLift_Pos(50, 200, 0);
-    osDelay(10);
-    Tower_SetTelescope_Pos(50, 200, 0);
+    // Tower_SetLift_Pos(50, 200, 0);
+    // osDelay(10);
+    // Tower_SetTelescope_Pos(50, 200, 0);
     Servo_Init();
 }
 

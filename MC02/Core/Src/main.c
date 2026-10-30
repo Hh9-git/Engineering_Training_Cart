@@ -113,6 +113,8 @@ int main(void)
   MX_TIM12_Init();
   MX_SPI2_Init();
   MX_TIM3_Init();
+  MX_UART7_Init();
+  MX_USART10_UART_Init();
   /* USER CODE BEGIN 2 */
   
   /* USER CODE END 2 */
@@ -230,6 +232,9 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  /* 没有调试器：上电瞬间就亮红灯 = 卡在某个外设初始化（Error_Handler），
+   * 此时调度器还没启动，和栈溢出/任务创建失败的灯一样红，但时间点不同。 */
+  WS2812_Ctrl(255, 0, 0);
   __disable_irq();
   while (1)
   {

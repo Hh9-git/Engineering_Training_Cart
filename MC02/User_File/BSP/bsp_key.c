@@ -1,5 +1,6 @@
 #include "bsp_key.h"
 #include "bsp_buzzer.h"
+#include "bsp_ws2812.h"
 
 KeyState keyState = NO_DETECT;
 uint32_t overTick = 0;
@@ -52,7 +53,6 @@ int8_t BSP_UserKey_Detect(void)
 
 void Key_Task(void *argument)
 {
-
  /* Infinite loop */
     for(;;)
     {

@@ -1,4 +1,5 @@
 #include "bsp_ws2812.h"
+#include "cmsis_os2.h"
 
 #define WS2812_LowLevel    0xC0     // 0码
 #define WS2812_HighLevel   0xF8     // 1码
@@ -76,4 +77,11 @@ void WS2812_BreathStep(void)
 
     WS2812_CtrlHSV(hue, WS2812_SAT, WS2812_VAL);
     hue = (uint16_t)((hue + WS2812_HUE_STEP) % 360U);
+}
+
+
+void WS2812_BootMark(uint8_t r, uint8_t g, uint8_t b)
+{
+    WS2812_Ctrl(r, g, b);
+    osDelay(800U);          /* 停留 800ms，让眼睛来得及看清是哪个颜色 */
 }

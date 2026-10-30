@@ -2,6 +2,7 @@
 #include "dvc_vofa.h"
 #include "dvc_stepmotor.h"
 #include "bsp_buzzer.h"
+#include "bsp_ws2812.h"
 
 
 void Main_Init(void)

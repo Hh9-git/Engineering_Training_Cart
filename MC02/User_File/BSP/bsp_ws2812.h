@@ -26,4 +26,9 @@ void WS2812_BreathStep(void);
  * 平时不用；确实需要看启动到哪一级时，在各级插入 WS2812_Beacon(n) 即可。 */
 void WS2812_Beacon(uint32_t n);
 
+/* 开机进度标记（排查"卡在哪个任务"用）：点亮一种颜色并停 300ms 让眼睛看见。
+ * 用法：在各任务初始化入口各调一次、颜色各不相同。
+ * 上电后最后看到的颜色 = 最后进入初始化的那一步；颜色停住不动，就是卡在那个任务的初始化里。 */
+void WS2812_BootMark(uint8_t r, uint8_t g, uint8_t b);
+
 #endif /* BSP_WS2812_H */

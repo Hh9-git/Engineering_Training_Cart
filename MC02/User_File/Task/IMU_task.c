@@ -2,6 +2,7 @@
 #include "bmi088driver.h"
 #include "MahonyAHRS.h"
 #include "bsp_buzzer.h"
+#include "bsp_ws2812.h"
 #include "dvc_lcd.h"
 #include <math.h>
 
@@ -65,7 +66,6 @@ void GetAngle(float q[4], float *yaw, float *pitch, float *roll)
 /* USER CODE END Header_ImuTask_Entry */
 void IMU_Task(void *argument)
 {
-    /* USER CODE BEGIN ImuTask_Entry */
     osDelay(10);
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
     while(BMI088_init())

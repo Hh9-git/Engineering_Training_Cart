@@ -22,8 +22,6 @@ int UART_Print(char *fmt, ...)
 }
 #endif /* HAL_UART_MODULE_ENABLED */
 
-
-
 //--------------------------------------------------------------------------------------------------------------------
 // UART Interrupt
 #ifdef HAL_UART_MODULE_ENABLED
@@ -36,7 +34,7 @@ static UART_DMA_Interrupt_t *UART_DMA_ItSource_Array; // UART中断回调函数�
  * 应输入UART源, 回调函数个数以及回调函数的地址
  * 联接后自动开启DMA
  */
-void AttachInterrupt_UART_DMA(UART_HandleTypeDef *huart, uint8_t *pData, uint8_t RxBuf_Size,void (*UART_Callback)(uint8_t *pData, uint16_t size))
+void AttachInterrupt_UART_DMA(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t RxBuf_Size,void (*UART_Callback)(uint8_t *pData, uint16_t size))
 {
     UART_DMA_ItSource_Array = (UART_DMA_Interrupt_t *)realloc(UART_DMA_ItSource_Array, (UART_DMA_Function_Count + 1) * sizeof(UART_DMA_Interrupt_t));
     UART_DMA_ItSource_Array[UART_DMA_Function_Count].huart = huart;
@@ -58,6 +56,40 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
                 HAL_UARTEx_ReceiveToIdle_DMA(huart, UART_DMA_ItSource_Array[i].UART_RxBuf, UART_DMA_ItSource_Array[i].UART_RxBuf_Size);
             }
         }
+}
+
+/* 帧错误/噪声/溢出都会进这里。HAL 的处理是"停掉接收 DMA 然后回调"，
+ * 而弱定义的 HAL_UART_ErrorCallback 是空的 —— 也就是说线上抖一下，
+ * 这块串口从此再也收不到数据（表现为"发了没反应"，而且不报错）。
+ * 这里只记下是哪个串口，真正的重挂交给任务做：
+ * 中断里此刻 DMA abort 可能还没走完，直接重启会拿到 HAL_BUSY。 */
+static UART_HandleTypeDef *UART_RxError_Source = NULL;
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    UART_RxError_Source = huart;
+}
+
+void UART_DMA_Recover_Error(void)
+{
+    if (UART_RxError_Source == NULL)
+    {
+        return;
+    }
+
+    UART_HandleTypeDef *huart = UART_RxError_Source;
+    UART_RxError_Source = NULL;
+
+    for (uint8_t i = 0; i < UART_DMA_Function_Count; i++)
+    {
+        if (UART_DMA_ItSource_Array[i].huart == huart)
+        {
+            HAL_UARTEx_ReceiveToIdle_DMA(huart,
+                                         UART_DMA_ItSource_Array[i].UART_RxBuf,
+                                         UART_DMA_ItSource_Array[i].UART_RxBuf_Size);
+            break;
+        }
+    }
 }
 
 #endif /* HAL_UART_MODULE_ENABLED */
