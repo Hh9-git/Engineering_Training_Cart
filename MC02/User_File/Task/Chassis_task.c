@@ -171,3 +171,6 @@ void Chassis_SetMotor_Vel(int16_t speed[5])//此处用5，方便与电机对应1
 	if(speed[4]>=0){Emm_V5_Vel_Control(2, 1, speed[4], acc_vel, false);}else{Emm_V5_Vel_Control(2, 0, -speed[4], acc_vel, false);}
     osDelay(1);
 }
+
+
+

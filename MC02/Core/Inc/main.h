@@ -40,6 +40,7 @@ extern "C" {
 #include <math.h>
 #include "stdint.h"
 #include <stdio.h>
+#include "stdbool.h"
 #include "FreeRTOS.h"  
 #include "queue.h"
 #include "cmsis_os2.h"          /* osDelay */
