@@ -21,6 +21,7 @@ uint16_t getRingBufferLength(void);
 uint8_t read1ByteFromRingBuffer(uint16_t position);
 
 void HMI_Init(void);
+void HMI_RxCpltISR(void);
 void HMI_Callback(uint8_t *pData, uint16_t size);
 HAL_StatusTypeDef HMI_Send_String(char*name,char*data);
 HAL_StatusTypeDef HMI_Send_Number(char*name,int num);

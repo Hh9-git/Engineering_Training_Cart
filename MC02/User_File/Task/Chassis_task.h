@@ -11,12 +11,13 @@
 #define RR 228.57f               // 轮子到中心的距离
 #define DECRATIO 19              // 电机减速比
 #define OFFSET 116.0f            // 码盘偏移
-
+#define COEFFICIENT 2.387324146f // 单位系数
 
 typedef enum
 {
     VELOCITY_MODE,
     POSITION_MODE,
+    MOTOR_POS_MODE,     // 已下发驱动器位置指令，Chassis_Run 不再输出速度
 } chassis_ctrl_e;
 
 
@@ -58,13 +59,14 @@ extern chassis_t chassis;
 void Chassis_Init(void);
 void Chassis_Task(void *argument);
 
-void Chassis_Move(int16_t Vx, int16_t Vy, int16_t W);
+void Chassis_Run(void);
+void Chassis_SetVel(float Vx, float Vy, float Vw);
+void Chassis_SetPos(float Px, float Py, float Yaw);
+void Chassis_MovePos(float dx_mm, float dy_mm, float dtheta_deg);
 
-void Chassis_Move_PosX(float x);
-void Chassis_Move_PosY(float y);
+void Chassis_SetMotor_Vel(const float speed[4]);
 
-void Chassis_SetMotor_Vel(int16_t speed[5]);  
-
-void Chassis_SetMotor_Pos(int16_t speed[5], uint32_t clk);
+void Chassis_SetMotor_Pos(const int32_t pulses[4], uint16_t vel_rpm, uint8_t acc);
+static float Chassis_WrapPi(float a);
 
 #endif // CHASSIS_TASK_H

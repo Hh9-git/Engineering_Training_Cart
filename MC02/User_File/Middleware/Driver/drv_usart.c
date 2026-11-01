@@ -1,4 +1,5 @@
 #include "drv_usart.h"
+#include "dvc_yis320.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -67,6 +68,15 @@ static UART_HandleTypeDef *UART_RxError_Source = NULL;
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
+    /* YIS320 走单字节中断：ORE 后 HAL 会停掉接收，
+     * 而且 ORE 与 RXNE 同时置位时错误分支会把刚重挂好的接收再停一次，
+     * 所以必须在这里补挂，不能只靠 RxCplt。 */
+    if (huart->Instance == USART10)
+    {
+        IMU_OnUartError(huart->ErrorCode);
+        return;
+    }
+
     UART_RxError_Source = huart;
 }
 

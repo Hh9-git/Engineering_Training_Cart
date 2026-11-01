@@ -180,3 +180,46 @@ void ZDT_CAN_Callback(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf)
     (void)pBuf;
 
 }
+
+
+/**
+  * @brief    读取系统参数
+  * @param    addr  ：电机地址
+  * @param    s     ：系统参数类型
+  * @retval   地址 + 功能码 + 命令状态 + 校验字节
+  */
+void Emm_V5_Read_Sys_Params(uint8_t addr, SysParams_t s)
+{
+  uint8_t i = 0; static uint8_t cmd[16] = {0};
+  
+  // 装载命令
+  cmd[i] = addr; ++i;                   // 地址
+
+  switch(s)                             // 功能码
+  {
+    case S_VBUS : cmd[i] = 0x24; ++i; break;	// 读取总线电压
+		case S_CBUS : cmd[i] = 0x26; ++i; break;	// 读取总线电流
+    case S_CPHA : cmd[i] = 0x27; ++i; break;	// 读取相电流
+		case S_ENCO : cmd[i] = 0x29; ++i; break;	// 读取编码器原始值
+		case S_CLKC : cmd[i] = 0x30; ++i; break;	// 读取实时脉冲数
+    case S_ENCL : cmd[i] = 0x31; ++i; break;	// 读取经过线性化校准后的编码器值
+		case S_CLKI : cmd[i] = 0x32; ++i; break;	// 读取输入脉冲数
+    case S_TPOS : cmd[i] = 0x33; ++i; break;	// 读取电机目标位置
+    case S_SPOS : cmd[i] = 0x34; ++i; break;	// 读取电机实时设定的目标位置
+		case S_VEL  : cmd[i] = 0x35; ++i; break;	// 读取电机实时转速
+    case S_CPOS : cmd[i] = 0x36; ++i; break;	// 读取电机实时位置
+    case S_PERR : cmd[i] = 0x37; ++i; break;	// 读取电机位置误差
+		case S_VBAT : cmd[i] = 0x38; ++i; break;	// 读取多圈编码器电池电压（Y42）
+		case S_TEMP : cmd[i] = 0x39; ++i; break;	// 读取电机实时温度（Y42）
+    case S_FLAG : cmd[i] = 0x3A; ++i; break;	// 读取电机状态标志位
+    case S_OFLAG: cmd[i] = 0x3B; ++i; break;	// 读取回零状态标志位
+		case S_OAF  : cmd[i] = 0x3C; ++i; break;	// 读取电机状态标志位 + 回零状态标志位（Y42）
+		case S_PIN  : cmd[i] = 0x3D; ++i; break;	// 读取引脚状态（Y42）
+    default: break;
+  }
+
+  cmd[i] = 0x6B; ++i;                   // 校验字节
+  
+  // 发送命令
+  FDCAN_SendCmd_Ext(&hfdcan1, cmd, i);
+}

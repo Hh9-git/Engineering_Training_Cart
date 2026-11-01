@@ -2,11 +2,11 @@
 #include "IMU_task.h"
 #include "Chassis_task.h"
 #include "dvc_lcd.h"
+#include "dvc_yis320.h"
 #include "bsp_ws2812.h"
 #include <math.h>
 #include <stdio.h>
 
-#define RAD_TO_DEG  57.29578f   // 弧度转角度
 #define LCD_REFRESH_MS  200     // LCD 走 SPI 逐字画点，一次刷 20 多个字符约 8ms，200ms 刷一次够看
 
 #define SIZE_DATA   16          // 数据区字号，字符宽度为 SIZE_DATA/2
@@ -28,7 +28,11 @@
 #define Y_VZ        140
 #define Y_LOCK      160
 #define Y_TEMP      184
-#define Y_STATUS    208
+#define Y_YIS       208     // YIS320 yaw（该行在加 YIS 之前一直没被使用）
+#define Y_PKT       222     // YIS320 通过帧数 / 校验失败数
+
+/* YIS320 两行用 12 号字：左半屏只有 140px，16 号字一行放不下 8 个字符 */
+#define SIZE_SMALL  12
 
 // 静态标题只画一次，循环里只刷新数值
 static void Lcd_DrawLabels(void)
@@ -41,6 +45,8 @@ static void Lcd_DrawLabels(void)
     LCD_ShowString(X_LABEL, Y_VZ,     (const uint8_t *)"Vz",    WHITE, BLACK, SIZE_DATA, 0);
     LCD_ShowString(X_LABEL, Y_LOCK,   (const uint8_t *)"Lock",  WHITE, BLACK, SIZE_DATA, 0);
     LCD_ShowString(X_LABEL, Y_TEMP,   (const uint8_t *)"Temp",  WHITE, BLACK, SIZE_DATA, 0);
+    LCD_ShowString(X_LABEL, Y_YIS,    (const uint8_t *)"YIS",   WHITE, BLACK, SIZE_SMALL, 0);
+    LCD_ShowString(X_LABEL, Y_PKT,    (const uint8_t *)"PKT",   WHITE, BLACK, SIZE_SMALL, 0);
 }
 
 /* 没有数据源的行先用占位符标出来，免得看成是"卡在 0" */
@@ -59,22 +65,31 @@ static int32_t ToDeci(float v)
 
 /* 显示 x.x 格式的定点数；尾部补空格，盖掉上一次更长时留下的字符。
    不用 LCD_ShowFloatNum：它会按固定位数补前导 0，yaw 会显示成 005.0。 */
-static void Lcd_ShowDeci(uint16_t x, uint16_t y, int32_t val10)
+static void Lcd_ShowDeci(uint16_t x, uint16_t y, int32_t val10, uint8_t sizey)
 {
     char buf[16];
     int32_t mag = (val10 < 0) ? -val10 : val10;
 
     sprintf(buf, "%s%ld.%ld   ", (val10 < 0) ? "-" : "",
             (long)(mag / 10), (long)(mag % 10));
-    LCD_ShowString(x, y, (const uint8_t *)buf, WHITE, BLACK, SIZE_DATA, 0);
+    LCD_ShowString(x, y, (const uint8_t *)buf, WHITE, BLACK, sizey, 0);
 }
 
 static void Lcd_UpdateValues(void)
 {
-    Lcd_ShowDeci(X_VALUE, Y_YAW,   ToDeci(imuAngle[INS_YAW_ADDRESS_OFFSET]   * RAD_TO_DEG));
-    Lcd_ShowDeci(X_VALUE, Y_PITCH, ToDeci(imuAngle[INS_PITCH_ADDRESS_OFFSET] * RAD_TO_DEG));
-    Lcd_ShowDeci(X_VALUE, Y_ROLL,  ToDeci(imuAngle[INS_ROLL_ADDRESS_OFFSET]  * RAD_TO_DEG));
-    Lcd_ShowDeci(X_VALUE, Y_TEMP,  ToDeci(imuTemp));
+    char buf[24];
+
+    Lcd_ShowDeci(X_VALUE, Y_YAW,   ToDeci(imuAngle[INS_YAW_ADDRESS_OFFSET]   * RAD_TO_DEG), SIZE_DATA);
+    Lcd_ShowDeci(X_VALUE, Y_PITCH, ToDeci(imuAngle[INS_PITCH_ADDRESS_OFFSET] * RAD_TO_DEG), SIZE_DATA);
+    Lcd_ShowDeci(X_VALUE, Y_ROLL,  ToDeci(imuAngle[INS_ROLL_ADDRESS_OFFSET]  * RAD_TO_DEG), SIZE_DATA);
+    Lcd_ShowDeci(X_VALUE, Y_TEMP,  ToDeci(imuTemp), SIZE_DATA);
+
+    /* YIS320：yaw 在首帧后自动归零，单位已经是度 */
+    Lcd_ShowDeci(X_VALUE, Y_YIS, ToDeci(IMU_getYaw()), SIZE_SMALL);
+
+    /* 通过帧数 / 校验失败数，用来判断接收链路是否正常 */
+    sprintf(buf, "%lu/%lu   ", (unsigned long)imu_pkt_cnt, (unsigned long)imu_cs_err);
+    LCD_ShowString(X_VALUE, Y_PKT, (const uint8_t *)buf, WHITE, BLACK, SIZE_SMALL, 0);
 }
 
 void Lcd_Init(void)

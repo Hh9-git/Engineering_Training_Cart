@@ -1,162 +1,173 @@
 #include "IMU_task.h"
-#include "bmi088driver.h"
-#include "MahonyAHRS.h"
-#include "bsp_buzzer.h"
-#include "bsp_ws2812.h"
-#include "dvc_lcd.h"
+#include "BMI088driver.h"
+#include "alg_vqf.h"
+#include "bsp_dwt.h"
 #include <math.h>
 
+/* 与 BMI088 陀螺 ODR (1000 Hz) 一致；改这里时 VQF_GYR_TS 自动跟随 */
+#define IMU_RATE_HZ        1000u
+#define IMU_PERIOD_TICKS   ((uint32_t)(configTICK_RATE_HZ / IMU_RATE_HZ))
+#define VQF_GYR_TS         (1.0f / (float)IMU_RATE_HZ)
 
-#define DES_TEMP    40.0f
-#define KP          100.f
-#define KI          50.f
-#define KD          10.f
-#define MAX_OUT     500
+/* 加热温控：设定值必须高于板子自然平衡温度，否则加热器永远不工作 */
+#define IMU_HEATER_TARGET_C   35.0f
+#define HEATER_KP             100.0f
+#define HEATER_KI             50.0f
+#define HEATER_KD             10.0f
+#define HEATER_MAX_OUT        500u    /* TIM3: PSC=23, ARR=9999, 1 kHz -> 5% 稳态最大占空比 */
 
-/* 陀螺零偏标定：PD 加热器把传感器稳定到 DES_TEMP 后再采一段静止数据求均值。
-   零偏随温度漂移，所以不能在开机瞬间(室温)标定，必须等温度到位。 */
-#define CALI_TEMP_TOL      1.0f     // 温度进入目标 ±1℃ 视为稳定（PD 是振荡的，带宽放宽）
-#define CALI_SETTLE_TICKS  2000     // 累计稳定 2s 后才开始采样
-#define CALI_SAMPLE_NUM    2000     // 采样 2000 次，1kHz 下约 2s
-#define CALI_ABORT_LIMIT   0.05f    // 采样期间任一分量超此值视为被晃动，作废重来
-#define CALI_TIMEOUT_TICKS 60000    // 等 60s 还没稳就强制标定，防止加热器够不到 DES_TEMP 时永不标定
+/* 升温 boost：只用于冷启动阶段，温度进入目标附近或超时后永久切回 PID */
+#define HEATER_BOOST_OUT        1000u  /* 10% 占空比 */
+#define HEATER_BOOST_MARGIN_C   2.0f   /* 距目标 2℃ 内结束 boost */
+#define HEATER_BOOST_TIMEOUT_MS 60000u /* 最多 boost 60s，防止目标不可达时持续高功率 */
+#define HEATER_CUTOFF_C         45.0f  /* 超温保护：高于此值强制关闭 */
 
-float gyro[3] = {0.0f};
-float gyro_cal[3] = {0.0f};
-float gyro_bias[3] = {0.0f};
-float acc[3] = {0.0f};
-float imuTemp = 0.0f;
-uint8_t imu_calibrated = 0;
+float gyro[3]       = {0.0f};
+float gyro_cal[3]   = {0.0f};
+float gyro_bias[3]  = {0.0f};
+float acc[3]        = {0.0f};
+float imuTemp       = 0.0f;
 
-float imuQuat[4] = {0.0f};
-float imuAngle[3] = {0.0f};
+float imuQuat[4]        = {1.0f, 0.0f, 0.0f, 0.0f};
+float imuAngle[3]       = {0.0f};
+float imuWorldAcc[3]    = {0.0f};
+float imuMotionAcc[3]   = {0.0f};
+float imu_bias_sigma    = -1.0f;
+float imu_sample_rate_hz = 0.0f;
+float imu_heater_out    = 0.0f;
 
-float out = 0;
-float err = 0;
-float err_l = 0;
-float err_ll = 0;
+uint8_t imu_calibrated    = 0;
+uint8_t imu_rest_detected = 0;
 
-void AHRS_init(float quat[4])
+static uint32_t s_dwt_last = 0;
+static uint32_t s_rate_cnt = 0;
+static float    s_rate_time = 0.0f;
+
+static float s_heat_err   = 0.0f;
+static float s_heat_err_l = 0.0f;
+static float s_heat_err_ll = 0.0f;
+static uint8_t  s_heat_warmup = 1;   /* 1 = 还在冷启动升温阶段 */
+static uint32_t s_heat_start  = 0;   /* boost 起始 tick，用于超时 */
+
+/* ZYX 欧拉角，q = [w,x,y,z]，与旧 Mahony 实现保持一致 */
+static void GetAngle(const float q[4], float *yaw, float *pitch, float *roll)
 {
-    quat[0] = 1.0f;
-    quat[1] = 0.0f;
-    quat[2] = 0.0f;
-    quat[3] = 0.0f;
+    float sinp = 2.0f * (q[0] * q[2] - q[1] * q[3]);
+    if (sinp > 1.0f)  sinp = 1.0f;
+    if (sinp < -1.0f) sinp = -1.0f;
 
+    *yaw   = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]),
+                    1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
+    *pitch = asinf(sinp);
+    *roll  = atan2f(2.0f * (q[0] * q[1] + q[2] * q[3]),
+                    1.0f - 2.0f * (q[1] * q[1] + q[2] * q[2]));
 }
 
-void AHRS_update(float quat[4], float gyro[3], float accel[3])
+/* 1 秒窗口统计实际采样率，用于核对 VQF 的固定 dt 是否与真实循环周期一致 */
+static void ImuRateStatUpdate(void)
 {
-    MahonyAHRSupdateIMU(quat, gyro[0], gyro[1], gyro[2], accel[0], accel[1], accel[2]);
+    float dt = DWT_GetDeltaT(&s_dwt_last);
+    if (dt <= 0.0f) return;
+
+    s_rate_cnt++;
+    s_rate_time += dt;
+
+    if (s_rate_time >= 1.0f)
+    {
+        imu_sample_rate_hz = (float)s_rate_cnt / s_rate_time;
+        s_rate_cnt  = 0;
+        s_rate_time = 0.0f;
+    }
 }
 
-void GetAngle(float q[4], float *yaw, float *pitch, float *roll)
-{
-    *yaw = atan2f(2.0f*(q[0]*q[3]+q[1]*q[2]), 2.0f*(q[0]*q[0]+q[1]*q[1])-1.0f);
-    *pitch = asinf(-2.0f*(q[1]*q[3]-q[0]*q[2]));
-    *roll = atan2f(2.0f*(q[0]*q[1]+q[2]*q[3]),2.0f*(q[0]*q[0]+q[3]*q[3])-1.0f);
-}
-
-/* USER CODE BEGIN Header_ImuTask_Entry */
-/**
-* @brief Function implementing the ImuTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_ImuTask_Entry */
 void IMU_Task(void *argument)
 {
+    (void)argument;
+
     osDelay(10);
-    HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
-    while(BMI088_init())
+    HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);   /* 加热器 PB1 / TIM3_CH4 */
+
+    while (BMI088_init() != BMI088_NO_ERROR)
     {
         osDelay(100);
     }
-    
-    AHRS_init(imuQuat);
 
-    uint32_t settle_cnt = 0;    // 温度累计落在容差带内的 tick 数
-    uint32_t total_cnt  = 0;    // 上电以来的 tick 数，用于超时
-    uint32_t sample_cnt = 0;    // 已累计的标定样本数
-    float sum[3] = {0.0f};
+    VQF_Init(VQF_GYR_TS);
+    imu_calibrated = 1;     /* 无开机标定流程，解算器就绪即显示 OK */
 
-    /* Infinite loop */
-    for(;;)
+    s_dwt_last = DWT->CYCCNT;
+    s_heat_start = osKernelGetTickCount();
+    uint32_t wake = osKernelGetTickCount() + IMU_PERIOD_TICKS;
+
+    for (;;)
     {
-        BMI088_read(gyro, acc, &imuTemp);
+        BMI088_read(gyro, acc, &imuTemp);   /* rad/s, m/s², ℃ */
 
-        /* 加热 PD：标定等待期间也必须每轮都跑，否则温度下落、err 永远进不了容差带 */
-        err_ll = err_l;
-        err_l = err;
-        err = DES_TEMP - imuTemp;
-        out = KP*err + KI*(err + err_l + err_ll) + KD*(err - err_l);
-        if (out > MAX_OUT) out = MAX_OUT;
-        if (out < 0) out = 0.f;
-        htim3.Instance->CCR4 = (uint16_t)out;
+        /* 加热：冷启动阶段先用 10% 占空比快升，进入目标 2℃ 内或超时后切回 PD */
+        s_heat_err_ll = s_heat_err_l;
+        s_heat_err_l  = s_heat_err;
+        s_heat_err    = IMU_HEATER_TARGET_C - imuTemp;
 
-        if (!imu_calibrated)
+        uint32_t heat_now = osKernelGetTickCount();
+        if (s_heat_warmup &&
+            (imuTemp >= IMU_HEATER_TARGET_C - HEATER_BOOST_MARGIN_C ||
+             (heat_now - s_heat_start) >= HEATER_BOOST_TIMEOUT_MS))
         {
-            total_cnt++;
-
-            /* 用累计(而非连续)计数，避免 PD 振荡把计数反复清零导致永远不达标 */
-            if (fabsf(err) < CALI_TEMP_TOL)
-            {
-                settle_cnt++;
-            }
-
-            /* 温度稳定足够久，或等待超时，才允许开始采样 */
-            if (settle_cnt >= CALI_SETTLE_TICKS || total_cnt >= CALI_TIMEOUT_TICKS)
-            {
-                if (fabsf(gyro[0]) > CALI_ABORT_LIMIT ||
-                    fabsf(gyro[1]) > CALI_ABORT_LIMIT ||
-                    fabsf(gyro[2]) > CALI_ABORT_LIMIT)
-                {
-                    /* 板子被晃动了，这段数据作废，重新采 */
-                    sum[0] = sum[1] = sum[2] = 0.0f;
-                    sample_cnt = 0;
-                }
-                else
-                {
-                    sum[0] += gyro[0];
-                    sum[1] += gyro[1];
-                    sum[2] += gyro[2];
-                    sample_cnt++;
-
-                    if (sample_cnt >= CALI_SAMPLE_NUM)
-                    {
-                        gyro_bias[0] = sum[0] / (float)sample_cnt;
-                        gyro_bias[1] = sum[1] / (float)sample_cnt;
-                        gyro_bias[2] = sum[2] / (float)sample_cnt;
-                        imu_calibrated = 1;
-
-                        /* 丢掉预热期间累积的 yaw，从标定完成这一刻重新积分 */
-                        AHRS_init(imuQuat);
-                        GetAngle(imuQuat, imuAngle + INS_YAW_ADDRESS_OFFSET, imuAngle + INS_PITCH_ADDRESS_OFFSET, imuAngle + INS_ROLL_ADDRESS_OFFSET);
-
-                        /* 标定完成提示音。会阻塞约 0.33s：这期间不读传感器也不跑 PD，
-                         * 但 AHRS 同样没在积分，所以不会凭空累积 yaw；
-                         * 加热器停在稳态输出上，温度也不会掉。 */
-                        Buzzer_CalibrationDoneSound();
-                    }
-                }
-            }
-
-            osDelay(1);
-            continue;
+            s_heat_warmup = 0;
         }
 
-        /* 减掉零偏再喂 AHRS。gyro[] 保留原始值不覆盖，LCD 才能交叉验证零偏 */
-        gyro_cal[0] = gyro[0] - gyro_bias[0];
-        gyro_cal[1] = gyro[1] - gyro_bias[1];
-        gyro_cal[2] = gyro[2] - gyro_bias[2];
+        float heat_out;
+        if (!isfinite(imuTemp) || imuTemp > HEATER_CUTOFF_C)
+        {
+            /* 超温或温度读数异常：强制关闭 */
+            heat_out = 0.0f;
+        }
+        else if (s_heat_warmup)
+        {
+            heat_out = (float)HEATER_BOOST_OUT;
+        }
+        else
+        {
+            heat_out = HEATER_KP * s_heat_err
+                     + HEATER_KI * (s_heat_err + s_heat_err_l + s_heat_err_ll)
+                     + HEATER_KD * (s_heat_err - s_heat_err_l);
 
-        AHRS_update(imuQuat, gyro_cal, acc);
-        GetAngle(imuQuat, imuAngle + INS_YAW_ADDRESS_OFFSET, imuAngle + INS_PITCH_ADDRESS_OFFSET, imuAngle + INS_ROLL_ADDRESS_OFFSET);
+            if (heat_out > (float)HEATER_MAX_OUT) heat_out = (float)HEATER_MAX_OUT;
+            if (heat_out < 0.0f) heat_out = 0.0f;
+        }
 
-        osDelay(1);
+        imu_heater_out = heat_out;
+        htim3.Instance->CCR4 = (uint16_t)heat_out;
+
+        VQF_Update(gyro, acc);
+
+        VQF_GetQuat(imuQuat);
+        GetAngle(imuQuat, &imuAngle[INS_YAW_ADDRESS_OFFSET],
+                          &imuAngle[INS_PITCH_ADDRESS_OFFSET],
+                          &imuAngle[INS_ROLL_ADDRESS_OFFSET]);
+
+        VQF_GetWorldAcc(imuWorldAcc);
+        VQF_GetMotionAcc(imuMotionAcc);
+
+        imu_bias_sigma    = VQF_GetBias(gyro_bias);
+        imu_rest_detected = VQF_RestDetected();
+
+        /* 兼容旧观测量：VQF 内部已经减零偏，这里只用于显示/交叉验证 */
+        for (int i = 0; i < 3; i++)
+        {
+            gyro_cal[i] = gyro[i] - gyro_bias[i];
+        }
+
+        ImuRateStatUpdate();
+
+        /* osDelayUntil 用绝对 tick；迟到返回错误时必须重对齐，否则会忙等 */
+        if (osDelayUntil(wake) != osOK)
+        {
+            wake = osKernelGetTickCount() + IMU_PERIOD_TICKS;
+        }
+        else
+        {
+            wake += IMU_PERIOD_TICKS;
+        }
     }
-    /* USER CODE END ImuTask_Entry */
 }
-
-
-

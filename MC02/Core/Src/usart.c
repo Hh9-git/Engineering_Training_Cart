@@ -131,7 +131,7 @@ void MX_USART10_UART_Init(void)
 
   /* USER CODE END USART10_Init 1 */
   huart10.Instance = USART10;
-  huart10.Init.BaudRate = 115200;
+  huart10.Init.BaudRate = 921600;
   huart10.Init.WordLength = UART_WORDLENGTH_8B;
   huart10.Init.StopBits = UART_STOPBITS_1;
   huart10.Init.Parity = UART_PARITY_NONE;
@@ -335,6 +335,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     GPIO_InitStruct.Alternate = GPIO_AF11_USART10;
     HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
+    /* USART10 interrupt Init */
+    HAL_NVIC_SetPriority(USART10_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(USART10_IRQn);
   /* USER CODE BEGIN USART10_MspInit 1 */
 
   /* USER CODE END USART10_MspInit 1 */
@@ -405,6 +408,8 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     */
     HAL_GPIO_DeInit(GPIOE, GPIO_PIN_2|GPIO_PIN_3);
 
+    /* USART10 interrupt Deinit */
+    HAL_NVIC_DisableIRQ(USART10_IRQn);
   /* USER CODE BEGIN USART10_MspDeInit 1 */
 
   /* USER CODE END USART10_MspDeInit 1 */

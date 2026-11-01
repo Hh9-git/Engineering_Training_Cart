@@ -32,6 +32,7 @@
 /* USER CODE BEGIN Includes */
 #include "bsp_ws2812.h"
 #include "bsp_dwt.h"
+#include "dvc_yis320.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -119,6 +120,10 @@ int main(void)
   /* USER CODE BEGIN 2 */
   /* DWT 由 CPU 时钟(480MHz)驱动, 用 SystemCoreClock 以便时钟树变更后自动跟随 */
   DWT_Init(SystemCoreClock / 1000000U);
+  /* YIS320 上电即开始输出，调度器启动前就开收，让首帧 yaw 零点尽早建立。
+     中断里只操作静态变量和 HAL，不调用任何 RTOS API，此时启动是安全的。 */
+  IMU_init();
+  IMU_RxStart();
   /* USER CODE END 2 */
 
   /* Init scheduler */

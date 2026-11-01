@@ -14,9 +14,9 @@ void Tower_Init(void)
     //  
     // Emm_V5_Angle_Control(6,0, 1000, 0, 45, 0, false);
     //  osDelay(100); 
-    // Tower_SetLift_Pos(50, 200, 0);
-    // osDelay(10);
-    // Tower_SetTelescope_Pos(50, 200, 0);
+    Tower_SetLift_Pos(100, 200, 0);
+    osDelay(10);
+    Tower_SetTelescope_Pos(0, 200, 0);
     Servo_Init();
 }
 

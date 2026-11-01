@@ -102,7 +102,7 @@ osThreadId_t IMUHandle;
 const osThreadAttr_t IMU_attributes = {
   .name = "IMU",
   .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 
 /* Private function prototypes -----------------------------------------------*/

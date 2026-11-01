@@ -12,6 +12,10 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+# VQF 官方实现是 C++（User_File/Middleware/Algorithm/VQF）
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -45,7 +49,9 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Collect all user source files (re-globbed automatically at build time)
-file(GLOB_RECURSE USER_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/User_File/*.c)
+file(GLOB_RECURSE USER_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/User_File/*.c
+    ${CMAKE_SOURCE_DIR}/User_File/*.cpp)
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -53,7 +59,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Collect all user include directories
-file(GLOB_RECURSE USER_HEADERS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/User_File/*.h)
+file(GLOB_RECURSE USER_HEADERS CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/User_File/*.h
+    ${CMAKE_SOURCE_DIR}/User_File/*.hpp)
 foreach(HEADER ${USER_HEADERS})
     get_filename_component(DIR ${HEADER} DIRECTORY)
     list(APPEND USER_INCLUDE_DIRS ${DIR})
@@ -67,7 +75,8 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
+    # VQF 全 float 运算（vqf.cpp 与 alg_vqf.cpp 必须看到同一个 typedef）
+    VQF_SINGLE_PRECISION
 )
 
 # Remove wrong libob.a library dependency when using cpp files

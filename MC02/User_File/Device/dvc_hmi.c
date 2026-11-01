@@ -251,22 +251,16 @@ void tjc_send_nstring(char* str, unsigned char str_length)
 
 
 /********************************************************
-函数名：  	HAL_UART_RxCpltCallback
-日期：    	2022.10.08
+函数名：  	HMI_RxCpltISR
 功能：    	串口接收中断,将接收到的数据写入环形缓冲区
-输入参数：
+            （HAL_UART_RxCpltCallback 已移到 drv_uart_rx.c 统一分发）
+输入参数：	void
 返回值： 		void
-修改记录：
 **********************************************************/
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+void HMI_RxCpltISR(void)
 {
-
-	if(huart->Instance == TJC_UART_INS)	// 判断是由哪个串口触发的中断
-	{
-		write1ByteToRingBuffer(RxBuffer[0]);
-		HAL_UART_Receive_IT(&TJC_UART,RxBuffer,1);		// 重新使能串口2接收中断
-	}
-	return;
+	write1ByteToRingBuffer(RxBuffer[0]);
+	HAL_UART_Receive_IT(&TJC_UART,RxBuffer,1);		// 重新使能串口接收中断
 }
 
 
