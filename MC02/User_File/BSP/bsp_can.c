@@ -39,6 +39,8 @@ void can_filter_init(void)
 
 	HAL_FDCAN_ConfigFilter(&hfdcan1,&fdcan_filter);
 	//拒绝接收匹配不成功的标准ID和扩展ID,不接受远程帧
+	//注意：drv_can.c 的 FDCAN_FilterInit() 已把不匹配扩展帧设为接收进 FIFO0（Emm_V5 回读要用）。
+	//这里再调 can_filter_init() 会把扩展帧全部拒掉，电机位置回读会静默失效。
 	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1,FDCAN_REJECT,FDCAN_REJECT,FDCAN_REJECT_REMOTE,FDCAN_REJECT_REMOTE);
 	HAL_FDCAN_ConfigFifoWatermark(&hfdcan1, FDCAN_CFG_RX_FIFO0, 1);
 //	HAL_FDCAN_ConfigFifoWatermark(&hfdcan1, FDCAN_CFG_RX_FIFO1, 1);

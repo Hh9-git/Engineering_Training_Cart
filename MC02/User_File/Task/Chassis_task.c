@@ -56,6 +56,33 @@ int16_t  car_move_speed = 50;
 
 chassis_t chassis = {0};   // 头文件里只有 extern 声明，定义放在这里
 
+/********************** 里程计 ************************/
+/* 实测：前进 100mm 四轮计数变化约 26071，理论 100/(π×80)×65536 = 26077.9 → 65536 计数/圈 */
+#define ODOM_COUNTS_PER_REV     65536.0f
+#define ODOM_MM_PER_COUNT       (3.14159265f * CHASSIS_WHEEL_DIAMETER_MM / ODOM_COUNTS_PER_REV)
+#define ODOM_STALE_MS           80u       /* 20ms 轮询，允许连丢 3~4 帧 */
+#define ODOM_SETTLE_N           3u        /* 连续 3 个周期都到位才判完成 */
+#define CHASSIS_POS_TOL_MM      2.0f      /* 轮子行程到位容差 */
+#define CHASSIS_POS_MIN_MM      5.0f      /* 行程太小时容差没有意义，交给超时判定 */
+#define CHASSIS_POS_TIMEOUT_MS  300u      /* 位置判定失败时的硬超时余量 */
+
+/* 逻辑轮顺序与 Car_Absolute_Pos_Ctrl_Line 的 s[4] 一致：{addr4, addr3, addr1, addr2} */
+static const uint8_t k_odom_addr[4] = {4, 3, 1, 2};
+/* 前进实测：addr4/addr1 计数增大，addr3/addr2 减小；逻辑行程取正需要翻符号 */
+static const int8_t  k_odom_sign[4] = {+1, -1, +1, -1};
+
+static int32_t  s_last_raw[4];      /* 上一次原始位置 */
+static uint32_t s_last_seq[4];      /* 上一次处理的反馈序号 */
+static float    s_wheel_mm[4];      /* 逻辑轮累计行程，mm，带符号 */
+static float    s_psi_prev;         /* 上一周期航向，rad */
+static uint8_t  s_odom_seeded;      /* 已完成首轮基准 */
+static uint8_t  s_odom_valid;       /* 四轮都新鲜，本次位姿有效 */
+static uint8_t  s_line_settle;      /* 直线到位连续计数 */
+static uint8_t  s_rot_settle;       /* 旋转到位连续计数 */
+
+static void Chassis_PollEncoder(void);
+static void Chassis_PrimeOdometry(void);
+
 void Chassis_Init(void)
 {
     AttachInterrupt_FDCAN(&hfdcan1, ZDT_CAN_Callback);
@@ -72,6 +99,26 @@ void Chassis_Init(void)
     /* 旋转航向pid初始化：err 单位rad，输出单位近似RPM。以下为起步值，需上车标定 */
     PID_Init(&chassis.PID_rotate, 100.0f, 0.5f, 5.0f, 500.0f, 100.0f);
 
+    /* 等四轮首帧并建立里程计基准，保证第一段动作的行程不被 seed 吃掉 */
+    Chassis_PrimeOdometry();
+}
+
+/* 轮转轮询电机实时位置：每周期读 2 个，四个轮子各 20ms 更新一次。
+   TX FIFO 只有 3 层，必须逐帧间隔发送；FIFO 满时跳过本轮，避免丢帧计数。 */
+static void Chassis_PollEncoder(void)
+{
+    static const uint8_t k_wheel_addr[4] = {4, 3, 1, 2};   /* 与逆解数组索引一一对应 */
+    static uint8_t idx = 0;
+
+    for (uint8_t i = 0; i < 2u; i++)
+    {
+        if (HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan1) > 0u)
+        {
+            Emm_V5_Read_Sys_Params(k_wheel_addr[idx], S_CPOS);
+        }
+        idx = (idx + 1u) & 3u;
+        osDelay(1);
+    }
 }
 
 void Chassis_Task(void *argument)
@@ -79,10 +126,13 @@ void Chassis_Task(void *argument)
     (void)argument;
     Chassis_Init();
     // Car_Absolute_Pos_Ctrl_Line(0, 2000, 30);   /* 上电测试：前进 2m / 3s，验证完请删除 */
-    Car_Rotate(180, 100);   /* 上电测试：顺时针旋转 90° / 50RPM，验证完请删除 */
+    Car_Rotate(90, 100);   /* 上电测试：顺时针旋转 90° / 50RPM，验证完请删除 */
+
+//    Car_Absolute_Pos_Ctrl_Line(100, 0, 30);   /* 上电测试：前进 2m / 3s，验证完请删除 */
     for (;;)
     {
         Chassis_Run();
+        Chassis_PollEncoder();
         osDelay(10);               // 速度模式调试时改回 Chassis_Move(...)
     }
 }
@@ -149,6 +199,167 @@ static float Chassis_WrapPi(float a)
 static inline float Chassis_GetYawRad(void)
 {
     return IMU_getYaw() * DEG_TO_RAD;
+}
+
+/* 临界区内取四轮反馈快照，保证 pos/seq/tick 来自同一次更新 */
+static void Chassis_ReadOdomSnapshot(int32_t raw[4], uint32_t seq[4], uint32_t tick[4])
+{
+    taskENTER_CRITICAL();
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        raw[i]  = Emm_Feedback[k_odom_addr[i]].pos_raw;
+        seq[i]  = Emm_Feedback[k_odom_addr[i]].seq;
+        tick[i] = Emm_Feedback[k_odom_addr[i]].tick;
+    }
+    taskEXIT_CRITICAL();
+}
+
+/* 上电时先轮询到四轮首帧，把里程计基准建立在动车之前，避免第一段行程被 seed 吃掉 */
+static void Chassis_PrimeOdometry(void)
+{
+    for (uint8_t n = 0; n < 50u; n++)
+    {
+        Chassis_PollEncoder();
+        if (Emm_Feedback[1].valid && Emm_Feedback[2].valid &&
+            Emm_Feedback[3].valid && Emm_Feedback[4].valid)
+        {
+            break;
+        }
+        osDelay(10);
+    }
+
+    int32_t  raw[4];
+    uint32_t seq[4];
+    uint32_t tick[4];
+
+    /* 四轮都拿到过帧才建立基准；否则留给 UpdateOdometry 的首轮 seed，
+       避免用 0 当基准算出一个巨大的假位移 */
+    if (!(Emm_Feedback[1].valid && Emm_Feedback[2].valid &&
+          Emm_Feedback[3].valid && Emm_Feedback[4].valid))
+    {
+        s_odom_seeded = 0;
+        return;
+    }
+
+    Chassis_ReadOdomSnapshot(raw, seq, tick);
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        s_last_raw[i] = raw[i];
+        s_last_seq[i] = seq[i];
+    }
+    s_psi_prev    = Chassis_GetYawRad();
+    s_odom_seeded = 1;
+    s_odom_valid  = 0;      /* 等第一轮新帧到达后再置 1 */
+}
+
+/* 里程计：四轮都拿到新帧时做一次差分 + 正运动学 + 世界系积分（50Hz）。
+   约定与 Car_Absolute_Pos_Ctrl_Line 的逆解严格互逆：
+   s0=+bx+by(addr4), s1=-bx+by(addr3), s2=-bx+by(addr1), s3=+bx+by(addr2) */
+static void Chassis_UpdateOdometry(float yaw_now)
+{
+    int32_t  raw[4];
+    uint32_t seq[4];
+    uint32_t tick[4];
+    uint32_t now = HAL_GetTick();
+    uint8_t  stale = 0;
+
+    Chassis_ReadOdomSnapshot(raw, seq, tick);
+
+    /* 只有四轮都更新过才积分，避免两两采样时刻错开污染 bx/by */
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        if (seq[i] == s_last_seq[i]) { return; }
+    }
+
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        if ((now - tick[i]) > ODOM_STALE_MS) { stale = 1; }
+    }
+
+    if ((!s_odom_seeded) || stale)
+    {
+        /* 首次或任一轮掉线：重新取基准，丢弃停机期间的未知行程，不产生跳变 */
+        for (uint8_t i = 0; i < 4u; i++)
+        {
+            s_last_raw[i] = raw[i];
+            s_last_seq[i] = seq[i];
+        }
+        s_psi_prev    = yaw_now;
+        s_odom_seeded = 1;
+        s_odom_valid  = 0;
+        return;
+    }
+
+    float d[4];
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        int32_t delta = raw[i] - s_last_raw[i];
+        /* 单圈展开：兼容单圈 0~65535 回绕和多圈累计，单次移动必须小于半圈 */
+        if (delta >  32768) { delta -= 65536; }
+        if (delta < -32768) { delta += 65536; }
+
+        s_last_raw[i] = raw[i];
+        s_last_seq[i] = seq[i];
+
+        d[i] = (float)k_odom_sign[i] * (float)delta * ODOM_MM_PER_COUNT;
+        s_wheel_mm[i] += d[i];
+    }
+
+    float bx = (d[0] - d[1] - d[2] + d[3]) * 0.25f;
+    float by = (d[0] + d[1] + d[2] + d[3]) * 0.25f;
+
+    /* yaw 中点积分到世界系，约定与 Chassis_OutputVel 的 atan2(x,y)+yaw 一致 */
+    float dpsi    = Chassis_WrapPi(yaw_now - s_psi_prev);
+    float psi_mid = yaw_now - 0.5f * dpsi;
+    s_psi_prev = yaw_now;
+
+    chassis.Px += bx * cosf(psi_mid) - by * sinf(psi_mid);
+    chassis.Py += bx * sinf(psi_mid) + by * cosf(psi_mid);
+
+    s_odom_valid = 1;
+}
+
+/* 本次直线/旋转是否已到位：四轮实测行程与目标行程之差都在容差内 */
+static uint8_t Chassis_LineArrived(void)
+{
+    float max_need = 0.0f;
+
+    if (!s_odom_valid) { return 0; }
+
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        float need = fabsf(chassis.line.s_mm[i]);
+        if (need > max_need) { max_need = need; }
+    }
+    if (max_need < CHASSIS_POS_MIN_MM) { return 0; }   /* 小动作交给超时判定 */
+
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        float prog = s_wheel_mm[i] - chassis.line.start_mm[i];
+        if (fabsf(chassis.line.s_mm[i] - prog) > CHASSIS_POS_TOL_MM) { return 0; }
+    }
+    return 1;
+}
+
+static uint8_t Chassis_RotateArrived(void)
+{
+    float max_need = 0.0f;
+
+    if (!s_odom_valid) { return 0; }
+
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        float need = fabsf(chassis.rotate_s_mm[i]);
+        if (need > max_need) { max_need = need; }
+    }
+    if (max_need < CHASSIS_POS_MIN_MM) { return 0; }   /* 小动作交给超时判定 */
+
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        float prog = s_wheel_mm[i] - chassis.rotate_start_mm[i];
+        if (fabsf(chassis.rotate_s_mm[i] - prog) > CHASSIS_POS_TOL_MM) { return 0; }
+    }
+    return 1;
 }
 
 /* 浮点 RPM 转驱动器可接受的整数 RPM：四舍五入并钳位到 ±5000（驱动器范围 0~5000，符号单独下发） */
@@ -284,6 +495,12 @@ static void Car_RotateByRad(float dtheta, uint8_t speed)
     chassis.rotate_active = 1;
     chassis.rotate_start_tick = osKernelGetTickCount();
     chassis.rotate_total_ms   = (uint32_t)(time_s * 1000.0f + 0.5f);
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        chassis.rotate_s_mm[i]     = s[i];
+        chassis.rotate_start_mm[i] = s_wheel_mm[i];
+    }
+    s_rot_settle = 0;
     chassis.ctrlMode = MOTOR_POS_MODE;
     taskEXIT_CRITICAL();
 
@@ -302,6 +519,7 @@ void Car_Rotate(int16_t angle, uint8_t speed)
     if (chassis.rotate_active || chassis.line.active) return;  /* 对应旧版 flag.car_in_task == 0 封锁 */
     Car_RotateByRad((float)angle * DEG_TO_RAD - Chassis_GetYawRad(), speed);
 }
+
 
 
 
@@ -349,6 +567,12 @@ uint8_t Car_Absolute_Pos_Ctrl_Line(uint16_t target_x, uint16_t target_y, uint8_t
     chassis.setYaw = yaw;   /* 本次直线的目标航向，停车后由保持逻辑使用 */
     chassis.line.start_tick = osKernelGetTickCount();
     chassis.line.total_ms   = (uint32_t)time_ds * 100u;   /* 先按请求时长，下发后修正 */
+    for (uint8_t i = 0; i < 4u; i++)
+    {
+        chassis.line.s_mm[i]     = s[i];
+        chassis.line.start_mm[i] = s_wheel_mm[i];
+    }
+    s_line_settle = 0;
     chassis.line.seq++;
     chassis.line.done   = 0;
     chassis.line.active = 1;
@@ -380,6 +604,9 @@ void Chassis_Run(void)
     /* 本周期只取一次航向：三次读之间若进了新帧，解算会用到两个不同时刻的 yaw */
     float yaw_now = Chassis_GetYawRad();
 
+    /* 先消费上一周期到的新反馈，更新 Px/Py 和逻辑轮累计行程 */
+    Chassis_UpdateOdometry(yaw_now);
+
     // chassis.Px =0- OFFSET * fast_sin(- yaw_now);
     // chassis.Py =0- OFFSET * (fast_cos(yaw_now) - 1);
 
@@ -408,11 +635,14 @@ void Chassis_Run(void)
         else
         {
             /* 给定 setVw 就按给定值；给 0 则保持锁存航向。
-               静止且误差在 ±容差 内时输出 0：到位后停住，不持续微调/蠕动；
-               被推动超出容差后航向 PID 会重新把车拉回来。 */
-            if (chassis.setVw == 0.0f &&
-                chassis.setVx == 0.0f && chassis.setVy == 0.0f &&
-                fabsf(err_yaw) < CAR_ROTATE_TOL_DEG * DEG_TO_RAD)
+               给定 setVw 时不跑航向 PID，避免积分饱和；静止且误差在 ±容差 内输出 0。 */
+            if (chassis.setVw != 0.0f)
+            {
+                chassis.PID_angle.Iout = 0.0f;     /* 自转时清积分，停车瞬间不跳 */
+                W = chassis.setVw;
+            }
+            else if (chassis.setVx == 0.0f && chassis.setVy == 0.0f &&
+                     fabsf(err_yaw) < CAR_ROTATE_TOL_DEG * DEG_TO_RAD)
             {
                 chassis.PID_angle.Iout = 0.0f;     /* 死区内清积分，防止残留 */
                 W = 0.0f;
@@ -420,7 +650,7 @@ void Chassis_Run(void)
             else
             {
                 PID_Calc(&chassis.PID_angle, 0.0f, err_yaw);
-                W = (chassis.setVw == 0.0f) ? chassis.PID_angle.out : chassis.setVw;
+                W = chassis.PID_angle.out;
             }
         }
         Chassis_OutputVel(chassis.setVx, chassis.setVy, W, yaw_now);
@@ -433,21 +663,60 @@ void Chassis_Run(void)
            当前目标重设掉，导致主运动剩余的行程丢失、车只走一小段就停。 */
         uint32_t now = osKernelGetTickCount();
 
-        if (chassis.line.active &&
-            (now - chassis.line.start_tick) >= chassis.line.total_ms)
+        if (chassis.line.active)
         {
-            chassis.line.active = 0;
-            chassis.line.done   = 1;
-            chassis.ctrlMode    = STOP_MODE;
-            chassis.yaw_hold_tick = now;   /* 稍后由 STOP_MODE 的保持逻辑修正航向 */
+            uint8_t done = 0;
+
+            /* 位置到达：四轮实测行程都进入容差，连续 3 个周期确认 */
+            if (Chassis_LineArrived())
+            {
+                if (++s_line_settle >= ODOM_SETTLE_N) { done = 1; }
+            }
+            else
+            {
+                s_line_settle = 0;
+            }
+
+            /* 里程计无效（还没 seed/掉线）或没到位时，按预计时长 + 余量兜底 */
+            if ((!done) && ((now - chassis.line.start_tick) >= (chassis.line.total_ms + CHASSIS_POS_TIMEOUT_MS)))
+            {
+                done = 1;
+            }
+
+            if (done)
+            {
+                chassis.line.active = 0;
+                chassis.line.done   = 1;
+                chassis.ctrlMode    = STOP_MODE;
+                chassis.yaw_hold_tick = now;   /* 稍后由 STOP_MODE 的保持逻辑修正航向 */
+            }
         }
-        if (chassis.rotate_active &&
-            (now - chassis.rotate_start_tick) >= chassis.rotate_total_ms)
+
+        if ((chassis.ctrlMode == MOTOR_POS_MODE) && chassis.rotate_active)
         {
-            chassis.rotate_active = 0;
-            chassis.rotate_done   = 1;
-            chassis.ctrlMode      = STOP_MODE;
-            chassis.yaw_hold_tick = now;
+            uint8_t done = 0;
+
+            if (Chassis_RotateArrived())
+            {
+                if (++s_rot_settle >= ODOM_SETTLE_N) { done = 1; }
+            }
+            else
+            {
+                s_rot_settle = 0;
+            }
+
+            if ((!done) && ((now - chassis.rotate_start_tick) >= (chassis.rotate_total_ms + CHASSIS_POS_TIMEOUT_MS)))
+            {
+                done = 1;
+            }
+
+            if (done)
+            {
+                chassis.rotate_active = 0;
+                chassis.rotate_done   = 1;
+                chassis.ctrlMode      = STOP_MODE;
+                chassis.yaw_hold_tick = now;
+            }
         }
     }
     else if (chassis.ctrlMode == STOP_MODE)

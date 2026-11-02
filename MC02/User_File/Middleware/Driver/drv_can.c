@@ -4,6 +4,8 @@
 //----------------------BSP_FDCAN----------------------//
 #ifdef HAL_FDCAN_MODULE_ENABLED
 
+volatile uint32_t can_tx_fail_cnt = 0;   /* 发送 FIFO 入队失败次数 */
+
 /*FDCAN的标准数据帧格式*/
 void FDCAN_Transmit(FDCAN_HandleTypeDef *hfdcan, uint16_t ID, uint8_t *Buf)
 {
@@ -42,7 +44,10 @@ void FDCAN_Transmit_Ext(FDCAN_HandleTypeDef *hfdcan, uint32_t ID, uint8_t *Buf, 
         FDCAN_TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
         FDCAN_TxHeader.MessageMarker = 0;
 
-        HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &FDCAN_TxHeader, Buf);
+        if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &FDCAN_TxHeader, Buf) != HAL_OK)
+        {
+            can_tx_fail_cnt++;      /* FIFO 满/总线异常：丢帧但先计数，便于调试 */
+        }
     }
 }
 
@@ -106,9 +111,29 @@ inline void FDCAN_FilterInit(FDCAN_HandleTypeDef *hfdcan)
     FDCAN_FilterInitStructure.FilterID1 = 0x000;                      // 11位ID
     FDCAN_FilterInitStructure.FilterID2 = 0x000;                      // 11位掩码
     HAL_FDCAN_ConfigFilter(hfdcan, &FDCAN_FilterInitStructure);
-    /*使能FDCAN的硬件中断*/
-    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0); // 使能新消息接收中断，必须开，否则收不到报文
+
+    /* 扩展帧全通滤波：对应官方例程的 32 位掩码全通（FilterBank=0, ID/掩码全 0）。
+       电机应答都是扩展帧。ExtFiltersNbr 必须在 CubeMX/fdcan.c 里为 1，
+       否则滤波元素会写到 RX FIFO0 的消息 RAM 上，接收会坏掉。 */
+    FDCAN_FilterTypeDef ext_filter;
+    ext_filter.IdType       = FDCAN_EXTENDED_ID;
+    ext_filter.FilterIndex  = 0;
+    ext_filter.FilterType   = FDCAN_FILTER_MASK;
+    ext_filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+    ext_filter.FilterID1    = 0x00000000;
+    ext_filter.FilterID2    = 0x00000000;
+    HAL_FDCAN_ConfigFilter(hfdcan, &ext_filter);
+
+    /* 兜底：不匹配的扩展帧也放进 FIFO0。
+       注意：bsp_can.c 的 can_filter_init() 会把不匹配扩展帧设为 REJECT，不要调用它。 */
+    HAL_FDCAN_ConfigGlobalFilter(hfdcan,
+                                 FDCAN_ACCEPT_IN_RX_FIFO0,   /* 不匹配的标准帧 */
+                                 FDCAN_ACCEPT_IN_RX_FIFO0,   /* 不匹配的扩展帧 */
+                                 FDCAN_REJECT_REMOTE,
+                                 FDCAN_REJECT_REMOTE);
     /*调试阶段全开检查总线质量，稳定后可以根据需要关掉多余的*/
+    /* 接收中断（RX_FIFO0_NEW_MESSAGE）不在这里开：和官方例程一致，
+       必须等 HAL_FDCAN_Start() 之后再 ActivateNotification，见 AttachInterrupt_FDCAN() */
     HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_TX_EVT_FIFO_ELT_LOST, 0);//发送事件FIFO溢出丢失，诊断用，不影响收发
     HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RAM_ACCESS_FAILURE, 0);  //FDCAN内部消息RAM访问失败，诊断用
     HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_DATA_PROTOCOL_ERROR, 0);//CAN总线数据段的位填充错误、CRC错误、位错误，诊断用
@@ -156,9 +181,11 @@ void AttachInterrupt_FDCAN(FDCAN_HandleTypeDef *hfdcan, void (*FDCAN_Callback)(F
     FDCAN_Function_Count++;                                                                                                             //数组大小计数+1
 
     /*FDCAN接收过滤器初始化*/
-    FDCAN_FilterInit(hfdcan); 
+    FDCAN_FilterInit(hfdcan);
     /*启动FDCAN*/
     HAL_FDCAN_Start(hfdcan);
+    /* 启动之后再开接收中断（与官方例程顺序一致），否则可能收不到报文 */
+    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
 }
 
 // FDCAN中断回调
@@ -166,13 +193,21 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
     if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
     {
-        assert_param(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &FDCAN_RxHeader, FDCAN_RxBuf) == HAL_OK);
-
-        for (uint8_t i = 0; i < FDCAN_Function_Count; i++)
+        /* 必须一次把 FIFO 读空：HAL 在调用本回调前已经清掉 RF0N 标志，
+           一次只读 1 帧的话，剩下帧不会再触发中断，FIFO 满了以后新帧直接丢弃。 */
+        while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0u)
         {
-            if (FDCAN_ItSource_Array[i].hfdcan == hfdcan)
+            if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &FDCAN_RxHeader, FDCAN_RxBuf) != HAL_OK)
             {
-                FDCAN_ItSource_Array[i].FDCAN_Callback(&FDCAN_RxHeader, FDCAN_RxBuf);
+                break;
+            }
+
+            for (uint8_t i = 0; i < FDCAN_Function_Count; i++)
+            {
+                if (FDCAN_ItSource_Array[i].hfdcan == hfdcan)
+                {
+                    FDCAN_ItSource_Array[i].FDCAN_Callback(&FDCAN_RxHeader, FDCAN_RxBuf);
+                }
             }
         }
     }

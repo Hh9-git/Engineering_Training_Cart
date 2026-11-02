@@ -58,6 +58,8 @@ typedef struct
     uint32_t seq;           // 每次成功下发 +1
     float    last_x;        // 指令位置，mm
     float    last_y;
+    float    s_mm[4];       // 本次直线每轮目标行程，逻辑轮顺序 {addr4, addr3, addr1, addr2}
+    float    start_mm[4];   // 下发时刻逻辑轮累计行程快照，mm
     uint8_t  active;        // 1: 直线移动进行中
     uint8_t  done;          // 1: 已完成
 } CarCtrl_Line;
@@ -100,6 +102,8 @@ typedef struct
     uint32_t rotate_start_tick; // 位置式旋转起始 tick
     uint32_t rotate_total_ms;   // 位置式旋转预计时长
     uint32_t yaw_hold_tick;     // 上次航向保持检查的 tick
+    float    rotate_s_mm[4];    // 本次旋转每轮目标行程
+    float    rotate_start_mm[4];// 旋转下发时刻逻辑轮累计行程快照
 
     /********************** 直线移动 ************************/
     CarCtrl_Line line;

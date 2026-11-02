@@ -1,4 +1,61 @@
 #include "dvc_stepmotor.h"
+#include "task.h"          // taskENTER_CRITICAL
+
+/**********************************************************
+*** 电机回读缓存（CAN 中断写入，任务上下文读取）
+**********************************************************/
+Emm_Feedback_t Emm_Feedback[EMM_MOTOR_NUM + 1];
+volatile uint32_t Emm_CanRxTotal = 0;
+volatile uint32_t Emm_CanRxDrop  = 0;
+volatile uint32_t Emm_CanRxAll   = 0;
+volatile uint32_t Emm_CanRxStd   = 0;
+volatile uint32_t Emm_CanRxExt   = 0;
+volatile uint32_t Emm_ReadReqTotal = 0;
+volatile uint8_t  Emm_LastIdType = 0;
+volatile uint32_t Emm_LastFrameId = 0;
+volatile uint8_t  Emm_LastFrameDlc = 0;
+volatile uint8_t  Emm_LastFrameData[8] = {0};
+
+/**
+  * @brief    读取 FDCAN 错误/队列状态（任务上下文）
+  * @retval   诊断结构体
+  */
+Can_Diag_t Can_GetDiag(void)
+{
+    uint32_t ecr   = hfdcan1.Instance->ECR;
+    uint32_t rxf0s = hfdcan1.Instance->RXF0S;
+    uint32_t psr   = hfdcan1.Instance->PSR;
+    uint32_t txfqs = hfdcan1.Instance->TXFQS;
+    Can_Diag_t d;
+
+    d.tec   = (uint8_t)(ecr & 0xFFu);
+    d.rec   = (uint8_t)((ecr >> 8) & 0x7Fu);
+    d.f0fl  = (uint8_t)(rxf0s & 0x7Fu);
+    d.rf0l  = (uint8_t)((rxf0s >> 25) & 0x01u);
+    d.psr   = (uint8_t)(psr & 0xFFu);
+    d.tffl  = (uint8_t)(txfqs & 0x3Fu);
+    d.state = (uint8_t)hfdcan1.State;
+
+    return d;
+}
+
+/**
+  * @brief    取电机最近一次原始位置（任务上下文）
+  * @param    addr：电机地址 1~6
+  * @retval   已带符号的原始位置；地址非法或还没收到过返回 0
+  */
+int32_t Emm_GetPosRaw(uint8_t addr)
+{
+    int32_t v;
+
+    if (addr < 1u || addr > EMM_MOTOR_NUM) { return 0; }
+
+    taskENTER_CRITICAL();
+    v = Emm_Feedback[addr].pos_raw;
+    taskEXIT_CRITICAL();
+
+    return v;
+}
 
 /**********************************************************
 *** 触发动作命令
@@ -174,11 +231,76 @@ void Emm_V5_Synchronous_motion(uint8_t addr)
 
 
 
+/**
+  * @brief    FDCAN 接收回调（中断上下文，只做整数解析和缓存，不做浮点/阻塞）
+  * @note     电机应答帧：扩展 ID = (addr << 8) | 包号，
+  *           数据 = 功能码 + 返回数据 + 0x6B。
+  *           0x36 读实时位置： [0x36, 符号(00正/01负), 位置(4B 大端), 0x6B]，单帧 7 字节。
+  */
 void ZDT_CAN_Callback(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf)
 {
-    (void)pHeader;
-    (void)pBuf;
+    /* 先计数再判断类型：标准帧也要能被发现（诊断用） */
+    Emm_CanRxAll++;
+    Emm_LastIdType = (uint8_t)pHeader->IdType;
 
+    /* 原样保存一帧（标准帧也存），串口屏/调试时可以直接看到 ID/DLC/数据 */
+    Emm_LastFrameId  = pHeader->Identifier;
+    Emm_LastFrameDlc = (uint8_t)(pHeader->DataLength & 0x0Fu);
+    for (uint8_t i = 0; i < 8u; i++)
+    {
+        Emm_LastFrameData[i] = (i < Emm_LastFrameDlc) ? pBuf[i] : 0u;
+    }
+
+    if (pHeader->IdType != FDCAN_EXTENDED_ID)
+    {
+        Emm_CanRxStd++;
+        return;
+    }
+    Emm_CanRxExt++;
+
+    uint32_t id   = pHeader->Identifier;
+    uint8_t  addr = (uint8_t)((id >> 8) & 0xFFu);
+    uint8_t  pack = (uint8_t)(id & 0xFFu);
+    uint8_t  dlc  = (uint8_t)(pHeader->DataLength & 0x0Fu);
+
+    Emm_CanRxTotal++;
+
+    if ((addr < 1u) || (addr > EMM_MOTOR_NUM) || (pack != 0u) || (dlc < 3u) || (dlc > 8u))
+    {
+        Emm_CanRxDrop++;
+        return;
+    }
+
+    Emm_Feedback_t *fb = &Emm_Feedback[addr];
+    fb->last_code = pBuf[0];
+    fb->last_dlc  = dlc;
+    fb->rx_cnt++;
+
+    if (pBuf[0] == 0x36u)                       /* 读实时位置应答 */
+    {
+        if ((dlc == 7u) && (pBuf[6] == 0x6Bu))
+        {
+            uint32_t v = ((uint32_t)pBuf[2] << 24) | ((uint32_t)pBuf[3] << 16) |
+                         ((uint32_t)pBuf[4] << 8)  |  (uint32_t)pBuf[5];
+
+            fb->pos_raw = (pBuf[1] == 0x00u) ? (int32_t)v : -(int32_t)v;
+            fb->tick    = HAL_GetTick();
+            fb->seq++;
+            fb->valid   = 1u;
+        }
+        else
+        {
+            fb->err_cnt++;                      /* E2/EE 或长度/校验不对 */
+        }
+    }
+    else if ((dlc == 3u) && (pBuf[1] == 0x02u))
+    {
+        fb->ack_cnt++;
+    }
+    else if ((dlc == 3u) && ((pBuf[1] == 0xE2u) || (pBuf[1] == 0xEEu)))
+    {
+        fb->err_cnt++;
+    }
 }
 
 
@@ -219,7 +341,8 @@ void Emm_V5_Read_Sys_Params(uint8_t addr, SysParams_t s)
   }
 
   cmd[i] = 0x6B; ++i;                   // 校验字节
-  
+
   // 发送命令
   FDCAN_SendCmd_Ext(&hfdcan1, cmd, i);
+  Emm_ReadReqTotal++;                   // 诊断：已发出的读请求数
 }
