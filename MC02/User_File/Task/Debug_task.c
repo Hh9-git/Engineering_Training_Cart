@@ -23,11 +23,8 @@ void Debug_Task(void *argument)
     {
        HMI_Send_String("name_yaw.txt","hello");
         HMI_Send_Float("yaw_float.val", IMU_getYaw());   /* YIS320 的 yaw，单位已经是度 */
-
-
         //  HMI_Send_Float("yaw_float.val", imuAngle[INS_YAW_ADDRESS_OFFSET] * RAD_TO_DEG);
           osDelay(10);
-        HMI_Send_Float("temp.val", imuTemp);
 
         osDelay(10);
 

@@ -27,7 +27,6 @@ void Set_Claw_Angle(float angle)
     Servo_SetAngle_180(&htim2, TIM_CHANNEL_1, angle);
 }
 
-
 void Set_Gimbal_Angle(float angle)
 {
     Servo_SetAngle_270(&htim2, TIM_CHANNEL_3, angle);
