@@ -29,6 +29,8 @@
 
 /* 直线移动的最小位移，太小不下发 */
 #define CHASSIS_LINE_MIN_DIST  1.0f
+/* 单次直线最大位移(mm)，超过直接拒绝，防止坐标回绕/误传导致冲出去 */
+#define CHASSIS_LINE_MAX_DIST_MM  10000.0f
 
 /* 麦轮旋转力臂(mm)：轮子行程 = 旋转角(rad) × 该值。
    实测标定：用 LEGNTH_WIDTH=315 时 90° 指令实际转了 135°，故 315 × 90/135 = 210。 */
@@ -142,7 +144,8 @@ void Chassis_SetMotor_Pos(int16_t speed[4],uint32_t clk);
 
 
 void Chassis_Move(int16_t Vx, int16_t Vy, int16_t W);
-void Car_Rotate(int16_t angle, uint8_t speed);
-uint8_t Car_Absolute_Pos_Ctrl_Line(uint16_t target_x, uint16_t target_y, uint8_t time_ds);
+void Chassis_Rotate(int16_t angle, uint8_t speed);
+uint8_t Chassis_Absolute_Pos_Ctrl_Line(int16_t target_x, int16_t target_y, uint8_t time_ds);
+uint8_t Chassis_Relative_Pos_Ctrl_Line(int16_t rel_x, int16_t rel_y, uint8_t time_ds);
 
 #endif // CHASSIS_TASK_H

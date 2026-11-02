@@ -66,7 +66,7 @@ chassis_t chassis = {0};   // 头文件里只有 extern 声明，定义放在这
 #define CHASSIS_POS_MIN_MM      5.0f      /* 行程太小时容差没有意义，交给超时判定 */
 #define CHASSIS_POS_TIMEOUT_MS  300u      /* 位置判定失败时的硬超时余量 */
 
-/* 逻辑轮顺序与 Car_Absolute_Pos_Ctrl_Line 的 s[4] 一致：{addr4, addr3, addr1, addr2} */
+/* 逻辑轮顺序与 Chassis_Absolute_Pos_Ctrl_Line 的 s[4] 一致：{addr4, addr3, addr1, addr2} */
 static const uint8_t k_odom_addr[4] = {4, 3, 1, 2};
 /* 前进实测：addr4/addr1 计数增大，addr3/addr2 减小；逻辑行程取正需要翻符号 */
 static const int8_t  k_odom_sign[4] = {+1, -1, +1, -1};
@@ -103,6 +103,29 @@ void Chassis_Init(void)
     Chassis_PrimeOdometry();
 }
 
+
+void Chassis_Task(void *argument)
+{
+    (void)argument;
+    Chassis_Init();
+    // Chassis_Absolute_Pos_Ctrl_Line(0, 2000, 30);   /* 上电测试：前进 2m / 3s，验证完请删除 */
+    // Chassis_Rotate(90, 100);   /* 上电测试：顺时针旋转 90° / 50RPM，验证完请删除 */
+
+    //二维码区
+//    Chassis_Absolute_Pos_Ctrl_Line(0, -1075, 30);   /* 上电测试：后退 1075mm / 3s，验证完请删除 */
+   Chassis_Relative_Pos_Ctrl_Line(0, 1075, 30);   /* 上电测试：后退 1075mm / 3s，验证完请删除 */
+
+
+    for (;;)
+    {
+        Chassis_Run();
+        Chassis_PollEncoder();
+        osDelay(10);               // 速度模式调试时改回 Chassis_Move(...)
+    }
+}
+
+
+
 /* 轮转轮询电机实时位置：每周期读 2 个，四个轮子各 20ms 更新一次。
    TX FIFO 只有 3 层，必须逐帧间隔发送；FIFO 满时跳过本轮，避免丢帧计数。 */
 static void Chassis_PollEncoder(void)
@@ -118,22 +141,6 @@ static void Chassis_PollEncoder(void)
         }
         idx = (idx + 1u) & 3u;
         osDelay(1);
-    }
-}
-
-void Chassis_Task(void *argument)
-{
-    (void)argument;
-    Chassis_Init();
-    // Car_Absolute_Pos_Ctrl_Line(0, 2000, 30);   /* 上电测试：前进 2m / 3s，验证完请删除 */
-    Car_Rotate(90, 100);   /* 上电测试：顺时针旋转 90° / 50RPM，验证完请删除 */
-
-//    Car_Absolute_Pos_Ctrl_Line(100, 0, 30);   /* 上电测试：前进 2m / 3s，验证完请删除 */
-    for (;;)
-    {
-        Chassis_Run();
-        Chassis_PollEncoder();
-        osDelay(10);               // 速度模式调试时改回 Chassis_Move(...)
     }
 }
 
@@ -253,7 +260,7 @@ static void Chassis_PrimeOdometry(void)
 }
 
 /* 里程计：四轮都拿到新帧时做一次差分 + 正运动学 + 世界系积分（50Hz）。
-   约定与 Car_Absolute_Pos_Ctrl_Line 的逆解严格互逆：
+   约定与 Chassis_Absolute_Pos_Ctrl_Line 的逆解严格互逆：
    s0=+bx+by(addr4), s1=-bx+by(addr3), s2=-bx+by(addr1), s3=+bx+by(addr2) */
 static void Chassis_UpdateOdometry(float yaw_now)
 {
@@ -462,7 +469,7 @@ static uint32_t Chassis_SendWheelPos(const float s_mm[4], float time_s, uint8_t 
    dtheta: 需要转过的相对角度(rad)，逆时针为正
    speed : 轮子转速, 单位RPM
    非阻塞：下发后立即返回，完成由 Chassis_Run 的 MOTOR_POS_MODE 判定。 */
-static void Car_RotateByRad(float dtheta, uint8_t speed)
+static void Chassis_RotateByRad(float dtheta, uint8_t speed)
 {
     dtheta = Chassis_WrapPi(dtheta);
 
@@ -513,35 +520,44 @@ static void Car_RotateByRad(float dtheta, uint8_t speed)
 }
 
 /* 原地旋转到绝对目标航向。 */
-void Car_Rotate(int16_t angle, uint8_t speed)
+void Chassis_Rotate(int16_t angle, uint8_t speed)
 {
     if (angle < -180 || angle > 180) return;
     if (chassis.rotate_active || chassis.line.active) return;  /* 对应旧版 flag.car_in_task == 0 封锁 */
-    Car_RotateByRad((float)angle * DEG_TO_RAD - Chassis_GetYawRad(), speed);
+    Chassis_RotateByRad((float)angle * DEG_TO_RAD - Chassis_GetYawRad(), speed);
 }
 
 
 
 
 
-/* 直线移动到绝对坐标（指令坐标）。位移由 Emm_V5 位置环执行：
+/* 直线移动内核（绝对/相对共用）。位移由 Emm_V5 位置环执行：
    四轮按逆解分配脉冲数、按比例分配速度、同时到达 → 直行且航向不变，
    到位后驱动器闭环保位，不会漂。
-   target_x/target_y: mm，+y 前进、+x 横移，与上电原点同一坐标系
+   x/y: mm。relative=0 时是绝对目标坐标；relative=1 时是相对当前指令坐标的世界系位移
+        （+y 前进、+x 横移）。
    time_ds: 期望总时长，单位 0.1s（0.1~25.5s），决定运动速度
    返回 1=已受理，0=被拒绝。只能在任务上下文调用，不要在中断里调。 */
-uint8_t Car_Absolute_Pos_Ctrl_Line(uint16_t target_x, uint16_t target_y, uint8_t time_ds)
+static uint8_t Chassis_LineMove(float x, float y, uint8_t time_ds, uint8_t relative)
 {
-    if (time_ds == 0) return 0;
+    if (time_ds == 0u) { return 0; }
 
-    float dx = (float)target_x - chassis.line.last_x;
-    float dy = (float)target_y - chassis.line.last_y;
-    float distance = sqrtf(dx * dx + dy * dy);
-    if (distance < CHASSIS_LINE_MIN_DIST) return 0;
-
-    /* 检查并置忙必须原子，避免两个任务同时通过守卫 */
+    /* 检查并置忙必须原子，避免两个任务同时通过守卫；
+       相对移动的目标依赖 last_x/last_y，也必须在同一临界区内计算 */
     taskENTER_CRITICAL();
     if (chassis.line.active || chassis.rotate_active)
+    {
+        taskEXIT_CRITICAL();
+        return 0;
+    }
+
+    float target_x = relative ? (chassis.line.last_x + x) : x;
+    float target_y = relative ? (chassis.line.last_y + y) : y;
+
+    float dx = target_x - chassis.line.last_x;
+    float dy = target_y - chassis.line.last_y;
+    float distance = sqrtf(dx * dx + dy * dy);
+    if ((distance < CHASSIS_LINE_MIN_DIST) || (distance > CHASSIS_LINE_MAX_DIST_MM))
     {
         taskEXIT_CRITICAL();
         return 0;
@@ -562,8 +578,8 @@ uint8_t Car_Absolute_Pos_Ctrl_Line(uint16_t target_x, uint16_t target_y, uint8_t
     s[2] = -bx + by;   /* 电机 addr 1 */
     s[3] = +bx + by;   /* 电机 addr 2 */
 
-    chassis.line.last_x = (float)target_x;
-    chassis.line.last_y = (float)target_y;
+    chassis.line.last_x = target_x;
+    chassis.line.last_y = target_y;
     chassis.setYaw = yaw;   /* 本次直线的目标航向，停车后由保持逻辑使用 */
     chassis.line.start_tick = osKernelGetTickCount();
     chassis.line.total_ms   = (uint32_t)time_ds * 100u;   /* 先按请求时长，下发后修正 */
@@ -594,6 +610,23 @@ uint8_t Car_Absolute_Pos_Ctrl_Line(uint16_t target_x, uint16_t target_y, uint8_t
 
     return 1;
 }
+
+/* 直线移动到绝对坐标（指令坐标，世界系）。 */
+uint8_t Chassis_Absolute_Pos_Ctrl_Line(int16_t target_x, int16_t target_y, uint8_t time_ds)
+{
+    return Chassis_LineMove((float)target_x, (float)target_y, time_ds, 0u);
+}
+
+/* 世界系相对移动：+y 前进、+x 横移，相对当前指令坐标；time_ds 单位 0.1s。
+   返回 1=已受理，0=被拒绝（忙碌/时长 0/距离过小）。
+   注意：位移相对的是"指令坐标"，不是当前车头方向。 */
+uint8_t Chassis_Relative_Pos_Ctrl_Line(int16_t rel_x, int16_t rel_y, uint8_t time_ds)
+{
+    return Chassis_LineMove((float)rel_x, (float)rel_y, time_ds, 1u);
+}
+
+
+
 
 
 
@@ -730,7 +763,7 @@ void Chassis_Run(void)
             float err = Chassis_WrapPi(chassis.setYaw - yaw_now);
             if (fabsf(err) > CAR_ROTATE_TOL_DEG * DEG_TO_RAD)   /* ±0.5° 死区 */
             {
-                Car_RotateByRad(err, CHASSIS_YAW_FIX_RPM);
+                Chassis_RotateByRad(err, CHASSIS_YAW_FIX_RPM);
             }
         }
     }
