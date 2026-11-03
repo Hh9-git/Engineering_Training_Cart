@@ -112,8 +112,8 @@ void Chassis_Task(void *argument)
     // Chassis_Rotate(90, 100);   /* 上电测试：顺时针旋转 90° / 50RPM，验证完请删除 */
 
     //二维码区
-//    Chassis_Absolute_Pos_Ctrl_Line(0, -1075, 30);   /* 上电测试：后退 1075mm / 3s，验证完请删除 */
-   Chassis_Relative_Pos_Ctrl_Line(0, 1075, 30);   /* 上电测试：后退 1075mm / 3s，验证完请删除 */
+//    Chassis_Absolute_Pos_Ctrl_Line(0, 1075, 30);   /* 上电测试：后退 1075mm / 3s，验证完请删除 */
+//    Chassis_Relative_Pos_Ctrl_Line(-1075, 1075, 30);   /* 上电测试：后退 1075mm / 3s，验证完请删除 */
 
 
     for (;;)
