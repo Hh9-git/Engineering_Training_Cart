@@ -185,7 +185,12 @@ void MX_FREERTOS_Init(void) {
   DebugHandle = osThreadNew(Debug_Task, NULL, &Debug_attributes);
 
   /* creation of Lcd */
-  LcdHandle = osThreadNew(Lcd_Task, NULL, &Lcd_attributes);
+  // LcdHandle = osThreadNew(Lcd_Task, NULL, &Lcd_attributes);
+  /* LCD 任务已取消：dvc_lcd.c 的 LCD_WR_DATA 是逐像素、一个字节一次
+   * HAL_SPI_Transmit 的忙等，一次数值刷新约 1.2 万次调用（15~30ms），
+   * 上电整屏 LCD_Fill 更是 13.4 万次。Lcd 和 Debug(HMI)/Key(蜂鸣器) 同为
+   * osPriorityLow，会把屏刷新和提示音一起拖卡。屏幕也已物理碎裂。
+   * 以后要用屏，把上面这行放开即可。 */
 
   /* creation of Key */
   KeyHandle = osThreadNew(Key_Task, NULL, &Key_attributes);

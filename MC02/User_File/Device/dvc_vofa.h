@@ -12,9 +12,10 @@
 
 
 void vofa_start(void);
-void vofa_send_data(uint8_t num, float data); 
+void vofa_send_data(uint8_t num, float data);
 void vofa_sendframetail(void);
 void vofa_demo(void);
+void vofa_send_remote(void);
 
 
 

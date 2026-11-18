@@ -26,8 +26,8 @@ void Tower_Task(void *argument)
 
 
     Set_Gimbal_Angle(-110);
-   //夹紧物料
-    Set_Claw_Angle(45);
+//    //夹紧物料
+//     Set_Claw_Angle(45);
     while (1)
     {
       

@@ -1,6 +1,5 @@
 #include "Main_task.h"
 #include "Chassis_task.h"
-#include "dvc_vofa.h"
 #include "dvc_stepmotor.h"
 #include "bsp_buzzer.h"
 #include "bsp_ws2812.h"
@@ -13,65 +12,72 @@ void Main_Init(void)
     Buzzer_StartupSound();
 }
 
-/* 等待当前直线/旋转动作结束（带超时，避免异常时卡死） */
-static void Main_WaitMotion(void)
-{
-	uint32_t t0 = osKernelGetTickCount();
-
-	while ((chassis.line.active || chassis.rotate_active) &&
-	       ((osKernelGetTickCount() - t0) < 10000u))
-	{
-		osDelay(10);
-	}
-}
-
 void Main_Task(void *argument)
 {
 	Main_Init();
 
 
-	Chassis_Absolute_Pos_Ctrl_Line(-200, 200, 10);
-	Main_WaitMotion();
-	/* 测试序列只执行一次，每步等动作完成再发下一条 */
-	Chassis_Absolute_Pos_Ctrl_Line(-200, 1075, 20);
-	Main_WaitMotion();
+	/* 每个航点：先直线走到坐标，再原地转到目标航向；
+	   time_ds=0 表示按距离自动算速度，非 0 表示指定运动时长(0.1s) */
+	// Chassis_Go_Pos(-200,200,   0, 0, 0);
 
-	Chassis_Rotate(90, 255);
-	Main_WaitMotion();
+	// /*第一趟*/
+	// //出启动区
+	// Chassis_Go_Pos(-150,150,   0, 0, 0);
+	// //扫码
+	// Chassis_Go_Pos(-150,  1065,  0, 5, 1);
+	// // osDelay(50);
+	// //拐角
+	// Chassis_Go_Pos(-150, 2000, 90, 5, 0);
+	// //原料区
+	// Chassis_Go_Pos(-1065,  2000,  90, 5, 1);
+	// // osDelay(100);
 
-	Chassis_Absolute_Pos_Ctrl_Line(-1100, 1075, 20);
-	Main_WaitMotion();
+    // //前往粗加工区掉头
+	// Chassis_Go_Pos(-1100,  2000,  180, 0, 0);
+	// //到达粗加工区加变向，塔吊面对粗加工区
+	// Chassis_Go_Pos(-1100,  50,  180, 15, 1);
+	// Chassis_Go_Pos(-1040,  50,  -90, 0, 1);
 
-	Chassis_Rotate(180, 255);
-	Main_WaitMotion();
-
-
-	Chassis_Absolute_Pos_Ctrl_Line(-1075, 100, 20);
-	Main_WaitMotion();
-
-	Chassis_Rotate(90, 255);
-	Main_WaitMotion();
-
-
-	Chassis_Absolute_Pos_Ctrl_Line(-100, 100, 10);
-	Main_WaitMotion();
-
-
-
-	Chassis_Rotate(0, 255);
-	Main_WaitMotion();
-	
-	//回启动区
-	Chassis_Absolute_Pos_Ctrl_Line(180, -85, 20);
-	Main_WaitMotion();
+	// //前往暂存区
+	// Chassis_Go_Pos(-2000,50, 180,5, 0);
+	// Chassis_Go_Pos(-2000,1065, 180, 5,1);
 
 
-	Chassis_Rotate(0, 255);
-	Main_WaitMotion();
 
+
+	// /*第二趟*/
+    // //前往原料区
+	// Chassis_Go_Pos(-2000, 2000, 90, 5, 0);
+	// //原料区
+	// Chassis_Go_Pos(-1065,  2000,  90, 5, 1);
+    // //前往粗加工区掉头
+	// Chassis_Go_Pos(-1100,  2000,  180, 0, 0);
+	// //到达粗加工区加变向，塔吊面对粗加工区
+	// Chassis_Go_Pos(-1100,  50,  180, 15, 1);
+	// Chassis_Go_Pos(-1040,  50,  -90, 0, 1);
+
+	// //前往暂存区
+	// Chassis_Go_Pos(-2000,50, 180,5, 0);
+	// Chassis_Go_Pos(-2000,1065, 180, 5,1);
+
+	// //前往原料区变向
+	// Chassis_Go_Pos(-2000, 2000, 90, 5, 0);
+	// //停止区
+	// Chassis_Go_Pos(-100,  2000,  0, 5, 1);
+
+
+
+
+	// Chassis_Go_Pos(0, 0, 0,10,1);
+	// Chassis_Go_Pos(-1075,  200,  90, 0, 0);
+
+	// Chassis_Go_Pos(-200,   200,   0, 0, 0);
+	// Chassis_Go_Pos(0,    0,   0, 0, 0);   /* 回启动区 */
 
 	for (;;)
 	{
+		/* vofa 输出已移到 Debug_Task（发送遥控器数据），这里保持空闲 */
 		osDelay(100);       /* 序列跑完就停在这里 */
 	}
 }

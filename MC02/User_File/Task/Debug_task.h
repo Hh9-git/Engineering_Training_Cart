@@ -7,6 +7,6 @@
 
 void Debug_Init(void);
 void Debug_Task(void *argument);
-
+void Remote_Callback();
 
 #endif

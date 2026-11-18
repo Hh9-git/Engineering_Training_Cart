@@ -282,6 +282,9 @@ uint8_t CDC_Transmit_HS(uint8_t* Buf, uint16_t Len)
   uint8_t result = USBD_OK;
   /* USER CODE BEGIN 12 */
   USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceHS.pClassData;
+  if (hcdc == NULL){
+    return USBD_BUSY;          /* 还没枚举完成，pClassData 为空，解引用会 HardFault */
+  }
   if (hcdc->TxState != 0){
     return USBD_BUSY;
   }

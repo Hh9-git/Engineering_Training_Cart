@@ -1,5 +1,6 @@
 #include "dvc_vofa.h"
 
+#include "dvc_remote.h"
 #include "usbd_cdc_if.h"
 #include "usbd_core.h"
 #include "usbd_cdc.h"
@@ -72,6 +73,25 @@ void vofa_sendframetail(void)
 	vofa_transmit((uint8_t *)send_buf, cnt);
 	cnt = 0;// 每次发送完帧尾都需要清零
 }
+/**
+***********************************************************************
+* @brief      vofa_send_remote(void)
+* @param      NULL
+* @retval     void
+* @details:   把遥控器主通道按 vofa float 帧发到 USB 虚拟串口
+*             必须在任务上下文调用（CDC_Transmit_HS 不能在中断里用）
+***********************************************************************
+**/
+void vofa_send_remote(void)
+{
+	vofa_send_data(0, Remote_control_FS.Right_X);
+	vofa_send_data(1, Remote_control_FS.Right_Y);
+	vofa_send_data(2, Remote_control_FS.Left_X);
+	vofa_send_data(3, Remote_control_FS.Left_Y);
+
+	vofa_sendframetail();
+}
+
 /**
 ***********************************************************************
 * @brief      vofa_demo(void)

@@ -83,7 +83,7 @@ int main(void)
   /* Enable the CPU Cache */
 
   /* Enable I-Cache---------------------------------------------------------*/
-  SCB_EnableICache();
+    SCB_EnableICache();
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -117,6 +117,7 @@ int main(void)
   MX_TIM3_Init();
   MX_UART7_Init();
   MX_USART10_UART_Init();
+  MX_UART5_Init();
   /* USER CODE BEGIN 2 */
   /* DWT 由 CPU 时钟(480MHz)驱动, 用 SystemCoreClock 以便时钟树变更后自动跟随 */
   DWT_Init(SystemCoreClock / 1000000U);
