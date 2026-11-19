@@ -7,6 +7,7 @@
 #include "dvc_vofa.h"
 #include "IMU_task.h"
 #include "Chassis_task.h"
+#include "Chassis_Odometry.h"
 #include "bsp_ws2812.h"
 #include "bsp_buzzer.h"
 #include "usart.h"

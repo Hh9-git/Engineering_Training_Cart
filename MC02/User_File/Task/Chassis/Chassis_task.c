@@ -1,51 +1,7 @@
 #include "Chassis_task.h"
+#include "Chassis_Odometry.h"
 #include "dvc_stepmotor.h"
-#include "bsp_ws2812.h"
-#include "alg_fastmath.h"
-#include "IMU_task.h"
 #include "dvc_yis320.h"
-// #include "task.h"          // taskENTER_CRITICAL / taskEXIT_CRITICAL
-#include <math.h>
-#include <stdint.h>
-
-/** 
-        底盘移动坐标系    W方向遵循坐标系右手法则
-        ^y
-        |                   
-        |______>x          
-
-
-        底盘俯视图
-        
-速度解算俯视图
- Speed[1]          Speed[2]                  
-    \               /
-      \           /
-        \       /
-          \   /
-            *
-          /    \
-        /        \
-      /            \
-    /                \
-Speed[3]           Speed[4]
-
-
-        
-实际底盘电机ID俯视图
- 0x01               0x02                |
-    \               /                   |
-      \           /                     |
-        \       /   {  }                   
-          \   /    {tower}{claw}
-            *       {  }
-          /    \
-        /        \
-      /            \
-    /     {tray}     \
-0x03                0x04
-
-*/
 
 uint8_t acc_vel=150;
 
@@ -57,32 +13,8 @@ static float startVx = 0.0f;
 static float startVy = 0.0f;
 
 
-static int32_t motor_last_pos[4] = {0};
-static uint32_t motor_last_seq[4] = {0};
-
-static uint8_t odometry_init = 0;
-// 如果反馈正方向与 Chassis_Move() 中对应轮子的正方向相反，将该项改成 -1
-static const int8_t motor_pos_dir[4] =
-{
-    +1, +1, +1, +1
-};
-
 static void Chassis_PollEncoder(void);
 static void Chassis_Accel_Update(void);
-
-/*调试用*/
-volatile float debug_wheel_ds[4] = {0};
-
-volatile float debug_dx_body = 0.0f;
-volatile float debug_dy_body = 0.0f;
-
-volatile float debug_dx_field = 0.0f;
-volatile float debug_dy_field = 0.0f;
-
-volatile float debug_start_yaw = 0.0f;
-volatile float debug_target_yaw = 0.0f;
-volatile float debug_current_yaw = 0.0f;
-volatile float debug_yaw_error = 0.0f;
 
 void Chassis_Init(void)
 {
@@ -92,9 +24,10 @@ void Chassis_Init(void)
     chassis.ctrlMode = VELOCITY_MODE;
 
     PID_Init(&chassis.PID_angle, 2.0f, 0.0f, 0.0f, 100.0f, 20.0f);
-
     PID_Init(&chassis.PID_x, 0.5f, 0.0f, 0.0f, 150.0f, 20.0f);
     PID_Init(&chassis.PID_y, 0.5f, 0.0f, 0.0f, 150.0f, 20.0f);
+
+
 
     osDelay(500);
 }
@@ -104,114 +37,30 @@ void Chassis_Task(void *argument)
     (void)argument;
 
     Chassis_Init();
+
+    Chassis_Odometry_Init();
     Chassis_ResetPos();
+
+    Chassis_SpinDrift(0.0f, 100.0f, 10.0f);
+
     
 
-    Chassis_Rotate(90.0f);
+
+
     for (;;)
     {
         Chassis_PollEncoder();
+
         Chassis_Odometry_Update();
+
+        // 将独立里程计模块的位置同步到底盘结构体
+        chassis.Px = Chassis_Odometry_GetX();
+        chassis.Py = Chassis_Odometry_GetY();
+
         Chassis_Update();
 
         osDelay(10);
     }
-}
-
-void Chassis_Odometry_Update(void)
-{
-    int32_t pos[4];
-    uint32_t seq[4];
-
-    // 读取四个电机的位置反馈
-    for (uint8_t i = 0; i < 4; i++)
-    {
-        uint8_t id = i + 1;
-
-        if (!Emm_Feedback[id].valid)
-            return;
-
-        pos[i] = Emm_Feedback[id].pos_raw;
-        seq[i] = Emm_Feedback[id].seq;
-
-        // 防止使用长时间未更新的位置数据
-        if ((HAL_GetTick() - Emm_Feedback[id].tick) > 100)
-            return;
-    }
-
-    // 等待四个电机都产生新的位置反馈
-    for (uint8_t i = 0; i < 4; i++)
-    {
-        if (seq[i] == motor_last_seq[i])
-            return;
-    }
-
-    // 第一次运行只记录初始位置，不计算位移
-    if (!odometry_init)
-    {
-        for (uint8_t i = 0; i < 4; i++)
-        {
-            motor_last_pos[i] = pos[i];
-            motor_last_seq[i] = seq[i];
-        }
-
-        odometry_init = 1;
-        return;
-    }
-
-    float wheel_ds[4];
-
-    // 计算四个轮子的实际位移
-    for (uint8_t i = 0; i < 4; i++)
-    {
-        int64_t delta = (int64_t)pos[i] - motor_last_pos[i];
-
-       wheel_ds[i] = (float)delta
-            * CHASSIS_POS_TO_MM
-            * motor_pos_dir[i];
-
-        motor_last_pos[i] = pos[i];
-        motor_last_seq[i] = seq[i];
-    }
-
-    // 麦克纳姆轮逆运动学
-   float dx_body = (wheel_ds[0]
-               + wheel_ds[1]
-               - wheel_ds[2]
-               - wheel_ds[3]) * 0.25f;
-
-   float dy_body = (wheel_ds[0]
-               - wheel_ds[1]
-               + wheel_ds[2]
-               - wheel_ds[3]) * 0.25f;
-
-    // 使用 IMU 航向角，将底盘坐标系位移转换到场地坐标系
-    float yaw = IMU_getYaw() * CHASSIS_PI / 180.0f;
-
-    float dx_field = dx_body * cosf(yaw)
-                   - dy_body * sinf(yaw);
-
-    float dy_field = dx_body * sinf(yaw)
-                   + dy_body * cosf(yaw);
-
-
-
-// 调试用
-    for (uint8_t i = 0; i < 4; i++)
-    {
-        debug_wheel_ds[i] = wheel_ds[i];
-    }
-
-    debug_dx_body = dx_body;
-    debug_dy_body = dy_body;
-
-    debug_dx_field = dx_field;
-    debug_dy_field = dy_field;
-
-
-    // 更新场地坐标
-    chassis.Px += dx_field;
-    chassis.Py += dy_field;
 }
 
 void Chassis_ResetPos(void)
@@ -219,14 +68,38 @@ void Chassis_ResetPos(void)
     chassis.Px = 0.0f;
     chassis.Py = 0.0f;
 
-    odometry_init = 0;
+    Chassis_Odometry_Reset();
 
     Chassis_clear();
 }
 
-/* 轮转读四轮 0x36 实时位置：每周期最多补 1 帧，4 个周期覆盖一圈。
-   CAN TX FIFO 只有 3 层，而 Chassis_Motor_SetVel 每周期已排入 5 帧；
-   这里只在 FIFO 有空位时发，不发就下周期再试，不 osDelay、不阻塞控制环。 */
+static void Chassis_SetMotion(float Vx, float Vy,
+                              float Yaw, float W,
+                              uint8_t mode)
+{
+    // 保存当前速度，作为加速起点
+    startVx = chassis.nowVx;
+    startVy = chassis.nowVy;
+
+    // 设置场地坐标系速度
+    chassis.setVx = Vx;
+    chassis.setVy = Vy;
+
+    // 设置航向角和旋转速度
+    chassis.setYaw = Yaw;
+    chassis.setVw = W;
+
+    // 重新开始加速规划
+    chassis.accel_count = 0;
+    chassis.accel_K = 50;
+
+    // 设置运动模式
+    chassis.ctrlMode = mode;
+
+    // 清除 PID 历史状态
+    Chassis_clear();
+}
+
 static void Chassis_PollEncoder(void)
 {
     static const uint8_t k_wheel_addr[4] = { 1u, 2u, 3u, 4u };
@@ -423,32 +296,20 @@ void Chassis_Motor_SetVel(int16_t speed[4])//此处用4，方便与电机对应1
 
 
 /**
- * 设置底盘速度
- * 单位:mm/s
- * 单位:rad/s
+ * @brief 场地坐标系速度控制，自动锁定当前航向
+ * @param Vx 场地 X 方向速度，mm/s
+ * @param Vy 场地 Y 方向速度，mm/s
  */
-void Chassis_SetVel(float Vx, float Vy, float Vw)
+void Chassis_SetVel(float Vx, float Vy)
 {
-    chassis.ctrlMode = VELOCITY_MODE;
-
-    chassis.setVx = Vx;
-    chassis.setVy = Vy;
-
-    // 进入速度模式时锁定当前航向
-    chassis.setYaw = IMU_getYaw();
-
-    startVx = chassis.nowVx;
-    startVy = chassis.nowVy;
-
-    chassis.accel_count = 0;
-    chassis.accel_K = 50;
-
-    Chassis_clear();
+    Chassis_SetMotion(Vx, Vy,
+                      IMU_getYaw(), 0.0f,
+                      VELOCITY_MODE);
 }
 /**
- * 设置底盘位置
- * 单位:mm
- * 单位:rad
+ * 设置底盘目标位置
+ * Px、Py：mm
+ * Yaw：degree，逆时针为正
  */
 void Chassis_SetPos(float Px, float Py, float Yaw)
 {
@@ -515,46 +376,27 @@ void Chassis_Rotate(float target)
     Chassis_clear();
 }
 
+/**
+ * @brief 指定航向的平移控制
+ * @param Vx 场地 X 方向速度，mm/s
+ * @param Vy 场地 Y 方向速度，mm/s
+ * @param Yaw 目标航向角，degree，逆时针为正
+ */
 void Chassis_Drift(float Vx, float Vy, float Yaw)
 {
-    startVx = chassis.nowVx;
-    startVy = chassis.nowVy;
-
-    chassis.setVx = Vx;
-    chassis.setVy = Vy;
-    chassis.setYaw = Yaw;
-
-    chassis.accel_count = 0;
-    chassis.accel_K = 50;
-
-    chassis.ctrlMode = VELOCITY_MODE;
-
-    Chassis_clear();
+    Chassis_SetMotion(Vx, Vy,
+                      Yaw, 0.0f,
+                      VELOCITY_MODE);
 }
 /**
- * @brief 底盘持续旋转漂移
- * @param Vx 场地坐标系 X 方向速度
- * @param Vy 场地坐标系 Y 方向速度
- * @param W  底盘旋转速度，逆时针为正
+ * @brief 平移与持续旋转
+ * @param Vx 场地 X 方向速度，mm/s
+ * @param Vy 场地 Y 方向速度，mm/s
+ * @param W 持续旋转控制量
  */
 void Chassis_SpinDrift(float Vx, float Vy, float W)
 {
-    // 保存当前速度，作为加速起点
-    startVx = chassis.nowVx;
-    startVy = chassis.nowVy;
-
-    // 设置目标平移速度
-    chassis.setVx = Vx;
-    chassis.setVy = Vy;
-
-    // 设置持续旋转速度
-    chassis.setVw = W;
-
-    // 重置正弦加速过程
-    chassis.accel_count = 0;
-    chassis.accel_K = 50;
-
-  chassis.ctrlMode = SPIN_DRIFT_MODE;
-
-    Chassis_clear();
+    Chassis_SetMotion(Vx, Vy,
+                      IMU_getYaw(), W,
+                      SPIN_DRIFT_MODE);
 }

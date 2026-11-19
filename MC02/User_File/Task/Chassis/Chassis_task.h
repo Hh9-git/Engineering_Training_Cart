@@ -72,7 +72,7 @@ void Chassis_Move(int16_t Vx, int16_t Vy, int16_t W);
 
 void Chassis_clear(void);
 void Chassis_Motor_SetVel(int16_t speed[4]);
-void Chassis_SetVel(float Vx, float Vy, float Vw);
+void Chassis_SetVel(float Vx, float Vy);
 void Chassis_SetPos(float Px, float Py, float Yaw);
 void Chassis_SetAngle(float target);
 void Chassis_Update(void);
