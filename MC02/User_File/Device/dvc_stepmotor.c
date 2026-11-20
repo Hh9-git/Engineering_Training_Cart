@@ -1,6 +1,7 @@
 #include "dvc_stepmotor.h"
-#include "task.h"          // taskENTER_CRITICAL
 
+
+#include "drv_can.h"
 /**********************************************************
 *** 电机回读缓存（CAN 中断写入，任务上下文读取）
 **********************************************************/
@@ -230,6 +231,30 @@ void Emm_V5_Synchronous_motion(uint8_t addr)
 
 
 
+/**
+  * @brief    触发回零
+  * @param    addr   ：电机地址
+  * @param    o_mode ：回零模式，0为单圈就近回零，1为单圈方向回零，2为多圈无限位碰撞回零，3为多圈有限位开关回零
+  * @param    snF   ：多机同步标志，false为不启用，true为启用
+  * @retval   地址 + 功能码 + 命令状态 + 校验字节
+  */
+void Emm_V5_Origin_Trigger_Return(uint8_t addr, uint8_t o_mode, bool snF)
+{
+  __IO static uint8_t cmd[16] = {0};
+  
+  // 装载命令
+  cmd[0] =  addr;                       // 地址
+  cmd[1] =  0x9A;                       // 功能码
+  cmd[2] =  o_mode;                     // 回零模式，0为单圈就近回零，1为单圈方向回零，2为多圈无限位碰撞回零，3为多圈有限位开关回零
+  cmd[3] =  snF;                        // 多机同步运动标志，false为不启用，true为启用
+  cmd[4] =  0x6B;                       // 校验字节
+  
+  // 发送命令
+  FDCAN_SendCmd_Ext(&hfdcan1, cmd, 5);
+}
+
+
+
 
 /**
   * @brief    FDCAN 接收回调（中断上下文，只做整数解析和缓存，不做浮点/阻塞）
@@ -346,3 +371,4 @@ void Emm_V5_Read_Sys_Params(uint8_t addr, SysParams_t s)
   FDCAN_SendCmd_Ext(&hfdcan1, cmd, i);
   Emm_ReadReqTotal++;                   // 诊断：已发出的读请求数
 }
+

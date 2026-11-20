@@ -11,7 +11,7 @@
 #include "bsp_ws2812.h"
 #include "bsp_buzzer.h"
 #include "usart.h"
-#include <stdio.h>
+#include  "drv_can.h"
 
 
 void Debug_Init(void)

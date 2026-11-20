@@ -1,8 +1,8 @@
 #ifndef DVC_STEPMOTOR_H
 #define DVC_STEPMOTOR_H
 
-#include "drv_can.h"
-#include <stdbool.h>
+
+#include "main.h"         
 
 
 #define					ABS(x)							((x) > 0 ? (x) : -(x)) 
@@ -91,6 +91,8 @@ void Emm_V5_Angle_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, 
 void Emm_V5_Synchronous_motion(uint8_t addr);
 
 void Emm_V5_Read_Sys_Params(uint8_t addr, SysParams_t s);
+
+void Emm_V5_Origin_Trigger_Return(uint8_t addr, uint8_t o_mode, bool snF);
 
 void ZDT_CAN_Callback(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf);
 

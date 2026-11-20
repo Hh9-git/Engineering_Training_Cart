@@ -16,4 +16,5 @@ void Tower_SetTelescope_Pos(int16_t target_pos,
                             uint16_t speed,
                             uint8_t acc);
 
+void Tower_Motor_Homing(void);
 #endif

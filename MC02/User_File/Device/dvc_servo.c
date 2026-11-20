@@ -21,28 +21,23 @@ void Servo_Init(void)
 }
 
 
-
-void Set_Claw_Angle(float angle)
+// 爪子舵机：180°
+void Set_Claw_Angle(int16_t angle)
 {
     Servo_SetAngle_180(&htim2, TIM_CHANNEL_1, angle);
 }
 
-void Set_Gimbal_Angle(float angle)
+// 云台舵机：270°
+void Set_Gimbal_Angle(int16_t angle)
 {
     Servo_SetAngle_270(&htim2, TIM_CHANNEL_3, angle);
 }
 
-void Set_Tray_Angle(float angle)
+// 转盘舵机：270°
+void Set_Tray_Angle(int16_t angle)
 {
     Servo_SetAngle_270(&htim1, TIM_CHANNEL_1, angle);
 }
-
-
-
-
-
-
-
 
 
 

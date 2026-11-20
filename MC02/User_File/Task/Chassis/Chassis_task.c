@@ -2,6 +2,7 @@
 #include "Chassis_Odometry.h"
 #include "dvc_stepmotor.h"
 #include "dvc_yis320.h"
+#include "drv_can.h"
 
 uint8_t acc_vel=150;
 
@@ -40,12 +41,6 @@ void Chassis_Task(void *argument)
 
     Chassis_Odometry_Init();
     Chassis_ResetPos();
-
-    Chassis_SpinDrift(0.0f, 100.0f, 10.0f);
-
-    
-
-
 
     for (;;)
     {
