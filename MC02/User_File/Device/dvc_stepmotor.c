@@ -145,7 +145,7 @@ void Emm_V5_Vel_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, bo
   * @param    snF ：多机同步标志 ，false为不启用，true为启用
   * @retval   地址 + 功能码 + 命令状态 + 校验字节
   */
-void Emm_V5_Pos_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, uint8_t raF, bool snF)
+bool Emm_V5_Pos_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, uint8_t raF, bool snF)
 {
     static uint8_t cmd[16] = {0};
 
@@ -165,7 +165,7 @@ void Emm_V5_Pos_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, ui
     cmd[12] =  0x6B;                      // 校验字节
 
     // 多帧发送
-    FDCAN_SendCmd_Ext(&hfdcan1, cmd, 13);
+    return FDCAN_SendCmd_Ext(&hfdcan1, cmd, 13);
 }
 
 
@@ -181,12 +181,12 @@ void Emm_V5_Pos_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, ui
   * @param    snF  ：多机同步标志
   * @retval   无
   */
-void Emm_V5_Angle_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint16_t angle, uint8_t raF, bool snF)
+bool Emm_V5_Angle_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint16_t angle, uint8_t raF, bool snF)
 {
     // 3200脉冲 = 360° → clk = angle * 3200 / 360 = angle * 80 / 9
     uint32_t clk = (uint32_t)angle * 80 / 9;
 
-    Emm_V5_Pos_Control(addr, dir, vel, acc, clk, raF, snF);
+    return Emm_V5_Pos_Control(addr, dir, vel, acc, clk, raF, snF);
 }
 
 
@@ -321,6 +321,10 @@ void ZDT_CAN_Callback(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf)
     else if ((dlc == 3u) && (pBuf[1] == 0x02u))
     {
         fb->ack_cnt++;
+        if (pBuf[0] == 0xFDu)               /* 0xFD = 位置模式命令的应答 */
+        {
+            fb->pos_ack_cnt++;
+        }
     }
     else if ((dlc == 3u) && ((pBuf[1] == 0xE2u) || (pBuf[1] == 0xEEu)))
     {

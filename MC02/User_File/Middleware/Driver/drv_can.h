@@ -19,12 +19,16 @@
     extern void FDCAN_FilterInit(FDCAN_HandleTypeDef *hfdcan);
     extern void FDCAN_Transmit(FDCAN_HandleTypeDef *hfdcan, uint16_t ID, uint8_t *Buf);
     extern void AttachInterrupt_FDCAN(FDCAN_HandleTypeDef *hfdcan, void (*FDCAN_Callback)(FDCAN_RxHeaderTypeDef *pHeader, uint8_t *pBuf));
-    extern void FDCAN_Transmit_Ext(FDCAN_HandleTypeDef *hfdcan, uint32_t ID, uint8_t *Buf, uint32_t DataLength);
+    /* 返回 true 表示这一帧真的进了 TX FIFO；false 表示等不到空位/入队失败 */
+    extern bool FDCAN_Transmit_Ext(FDCAN_HandleTypeDef *hfdcan, uint32_t ID, uint8_t *Buf, uint32_t DataLength);
     extern void FDCAN_FilterInit_Ext(FDCAN_HandleTypeDef *hfdcan);
-    extern void FDCAN_SendCmd_Ext(FDCAN_HandleTypeDef *hfdcan, uint8_t *cmd, uint8_t len);
+    /* 多帧命令：任一帧没发出去就返回 false（调用者据此决定要不要重发） */
+    extern bool FDCAN_SendCmd_Ext(FDCAN_HandleTypeDef *hfdcan, uint8_t *cmd, uint8_t len);
 
     /* 发送 FIFO 入队失败次数（深度只有 3，轮询/连发时会暴露出来） */
     extern volatile uint32_t can_tx_fail_cnt;
+    /* 发生 bus-off 的次数（上电时电机还没 ACK 会触发，恢复后自动重启） */
+    extern volatile uint32_t can_busoff_cnt;
 #endif /* HAL_FDCAN_MODULE_ENABLED */
 
 //-----------------------------------------------------------------------------------------------------------------------

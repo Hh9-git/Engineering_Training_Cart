@@ -1,10 +1,12 @@
 #include "drv_can.h"
+#include "cmsis_os2.h"
 #include <stdlib.h>
 
 //----------------------BSP_FDCAN----------------------//
 #ifdef HAL_FDCAN_MODULE_ENABLED
 
 volatile uint32_t can_tx_fail_cnt = 0;   /* 发送 FIFO 入队失败次数 */
+volatile uint32_t can_busoff_cnt = 0;    /* 进入 bus-off 的次数 */
 
 /*FDCAN的标准数据帧格式*/
 void FDCAN_Transmit(FDCAN_HandleTypeDef *hfdcan, uint16_t ID, uint8_t *Buf)
@@ -29,33 +31,52 @@ void FDCAN_Transmit(FDCAN_HandleTypeDef *hfdcan, uint16_t ID, uint8_t *Buf)
 #endif /* HAL_FDCAN_MODULE_ENABLED */
 
 /*FDCAN的扩展帧格式*/
-void FDCAN_Transmit_Ext(FDCAN_HandleTypeDef *hfdcan, uint32_t ID, uint8_t *Buf, uint32_t DataLength)
+bool FDCAN_Transmit_Ext(FDCAN_HandleTypeDef *hfdcan, uint32_t ID, uint8_t *Buf, uint32_t DataLength)
 {
     FDCAN_TxHeaderTypeDef FDCAN_TxHeader;
-    if ((Buf != NULL))
+    if (Buf == NULL)
     {
-        FDCAN_TxHeader.Identifier = ID;
-        FDCAN_TxHeader.IdType = FDCAN_EXTENDED_ID;
-        FDCAN_TxHeader.TxFrameType = FDCAN_DATA_FRAME;
-        FDCAN_TxHeader.DataLength = DataLength;                     // 由调用者指定
-        FDCAN_TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-        FDCAN_TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
-        FDCAN_TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
-        FDCAN_TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-        FDCAN_TxHeader.MessageMarker = 0;
-
-        if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &FDCAN_TxHeader, Buf) != HAL_OK)
-        {
-            can_tx_fail_cnt++;      /* FIFO 满/总线异常：丢帧但先计数，便于调试 */
-        }
+        return false;
     }
+
+    /* TX FIFO 只有 3 个槽位（fdcan.c 里 TxFifoQueueElmtsNbr = 3），而 Emm_V5 的位置命令
+       一条就要 2 帧。两条命令连着发就会溢出，第 4 帧被静默丢掉。
+       入队前先等空位：用 osDelay 让出 CPU，不要死等（同优先级任务会互相冻住）。
+       只有任务上下文会调用本函数，osDelay 安全。 */
+    for (uint8_t wait = 0u; wait < 5u; wait++)
+    {
+        if (HAL_FDCAN_GetTxFifoFreeLevel(hfdcan) > 0u)
+        {
+            break;
+        }
+        osDelay(1);
+    }
+
+    FDCAN_TxHeader.Identifier = ID;
+    FDCAN_TxHeader.IdType = FDCAN_EXTENDED_ID;
+    FDCAN_TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+    FDCAN_TxHeader.DataLength = DataLength;                     // 由调用者指定
+    FDCAN_TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+    FDCAN_TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
+    FDCAN_TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
+    FDCAN_TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+    FDCAN_TxHeader.MessageMarker = 0;
+
+    if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &FDCAN_TxHeader, Buf) != HAL_OK)
+    {
+        can_tx_fail_cnt++;      /* FIFO 满/总线异常：丢掉但计数，调用者可据此重发 */
+        return false;
+    }
+
+    return true;
 }
 
 /*FDCAN扩展帧多帧发送（自动分包）*/
-void FDCAN_SendCmd_Ext(FDCAN_HandleTypeDef *hfdcan, uint8_t *cmd, uint8_t len)
+bool FDCAN_SendCmd_Ext(FDCAN_HandleTypeDef *hfdcan, uint8_t *cmd, uint8_t len)
 {
     /*i:已发送字节数, j:有效数据总长, k:剩余字节, packNum:包序号*/
     uint8_t i = 0, j = 0, k = 0, l = 0, packNum = 0;
+    bool ok = true;
     uint8_t txData[8];
 
     // 计算有效数据长度（去掉cmd[0]地址和最后一个校验字节）
@@ -73,17 +94,25 @@ void FDCAN_SendCmd_Ext(FDCAN_HandleTypeDef *hfdcan, uint8_t *cmd, uint8_t len)
         if (k < 8)
         {
             for (l = 0; l < k; l++, i++) { txData[l + 1] = cmd[i + 2]; }
-            FDCAN_Transmit_Ext(hfdcan, ((uint32_t)cmd[0] << 8) | packNum, txData, k + 1);
+            if (!FDCAN_Transmit_Ext(hfdcan, ((uint32_t)cmd[0] << 8) | packNum, txData, k + 1))
+            {
+                ok = false;
+            }
         }
         // 剩余超过8字节：发满7字节有效数据
         else
         {
             for (l = 0; l < 7; l++, i++) { txData[l + 1] = cmd[i + 2]; }
-            FDCAN_Transmit_Ext(hfdcan, ((uint32_t)cmd[0] << 8) | packNum, txData, 8);
+            if (!FDCAN_Transmit_Ext(hfdcan, ((uint32_t)cmd[0] << 8) | packNum, txData, 8))
+            {
+                ok = false;
+            }
         }
 
         packNum++;
     }
+
+    return ok;
 }
 
 //--------------------------------------------------------------------------------------------------------------------
@@ -186,6 +215,30 @@ void AttachInterrupt_FDCAN(FDCAN_HandleTypeDef *hfdcan, void (*FDCAN_Callback)(F
     HAL_FDCAN_Start(hfdcan);
     /* 启动之后再开接收中断（与官方例程顺序一致），否则可能收不到报文 */
     HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+    /* bus-off 必须开中断自己恢复，否则总线断了就再也回不来 */
+    HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_BUS_OFF, 0);
+}
+
+/**
+  * @brief    FDCAN 错误状态回调（中断上下文）
+  * @note     上电瞬间电机还没启动，发出去的帧没人 ACK，TEC 涨到 255 就进 bus-off。
+  *           H7 的 FDCAN 进 bus-off 后不会自动恢复，必须重新 Start，否则整条总线
+  *           一直是死的——表现就是"重新上电后电机不动，重新烧录（MCU 复位）才动"。
+  */
+void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs)
+{
+    if ((ErrorStatusITs & FDCAN_IT_BUS_OFF) != 0U)
+    {
+        can_busoff_cnt++;
+
+        if (hfdcan->State == HAL_FDCAN_STATE_BUSY)
+        {
+            HAL_FDCAN_Stop(hfdcan);
+            HAL_FDCAN_Start(hfdcan);
+            HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+            HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_BUS_OFF, 0);
+        }
+    }
 }
 
 // FDCAN中断回调

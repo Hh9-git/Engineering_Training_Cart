@@ -3,7 +3,7 @@
 
 
 Servo_t claw={0,180,Set_Claw_Angle};
-Servo_t gimbal={-110,270,Set_Gimbal_Angle};
+Servo_t gimbal={0,270,Set_Gimbal_Angle};
 Servo_t tray={135,270,Set_Tray_Angle};
 
 

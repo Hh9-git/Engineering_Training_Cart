@@ -12,6 +12,7 @@
 #include "bsp_buzzer.h"
 #include "usart.h"
 #include  "drv_can.h"
+#include <stdio.h>
 
 
 void Debug_Init(void)
@@ -35,6 +36,17 @@ void Debug_Task(void *argument)
         {
             last_hmi = HAL_GetTick();
 
+            /* 5/6 号（升降/伸缩）也轮询实时位置：没有调试器，只能靠屏上的绝对值
+               区分"指令没发出去"和"已经在目标位置上"。每轮发一帧读请求，
+               先看 TX FIFO 有没有空位，别和底盘的命令抢那 3 个槽位。 */
+            static const uint8_t k_tower_addr[2] = { 5u, 6u };
+            static uint8_t tower_idx = 0u;
+            if (HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan1) > 0u)
+            {
+                Emm_V5_Read_Sys_Params(k_tower_addr[tower_idx], S_CPOS);
+                tower_idx ^= 1u;
+            }
+
             /* chassis_pos/chassis_ang 是 2 位小数控件，Send_Float 内部 ×100，屏上读数就是 mm */
             HMI_Send_Float("chassis_pos.val", chassis.Px);   /* Px, mm */
             HMI_Send_Float("chassis_ang.val", IMU_getYaw());   /* Py, mm */
@@ -48,10 +60,12 @@ void Debug_Task(void *argument)
              HMI_Send_Float("pos_x.val",  chassis.Px);
              HMI_Send_Float("pos_y.val",  chassis.Py);
 
-            /* R=已发读请求 / 收到帧 / 丢弃帧 / TX 入队失败，最近一帧 功能码:长度，L=1s 内有应答的电机位图 */
+            /* R=已发读请求 / 收到帧 / 丢弃帧 / TX 入队失败，最近一帧 功能码:长度，
+               L=1s 内有应答的电机位图（bit0~bit5 = 1~6 号），P=5/6 号实时绝对位置，
+               B=bus-off 次数（上电时电机没起来会 +1，恢复后总线自动重启） */
             uint32_t now  = HAL_GetTick();
             unsigned live = 0u;
-            for (uint8_t i = 1u; i <= 4u; i++)
+            for (uint8_t i = 1u; i <= 6u; i++)
             {
                 if (Emm_Feedback[i].valid &&
                     (uint32_t)(now - Emm_Feedback[i].tick) < 1000u)
@@ -60,15 +74,18 @@ void Debug_Task(void *argument)
                 }
             }
 
-            char st[64];
-            snprintf(st, sizeof(st), "R%lu/%lu/%lu/%lu %02X:%u L%X",
+            char st[96];
+            snprintf(st, sizeof(st), "R%lu/%lu/%lu/%lu %02X:%u L%X P%ld/%ld B%lu",
                     (unsigned long)Emm_ReadReqTotal,
                     (unsigned long)Emm_CanRxAll,
                     (unsigned long)Emm_CanRxDrop,
                     (unsigned long)can_tx_fail_cnt,
                     (unsigned int)Emm_LastFrameData[0],
                     (unsigned int)Emm_LastFrameDlc,
-                    live);
+                    live,
+                    (long)Emm_GetPosRaw(5),
+                    (long)Emm_GetPosRaw(6),
+                    (unsigned long)can_busoff_cnt);
             HMI_Send_String("name_yaw.txt", st);
 
             /* 遥控器数据走 USB 虚拟串口（vofa float 帧），任务上下文发送 */

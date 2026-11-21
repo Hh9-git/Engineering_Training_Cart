@@ -83,26 +83,12 @@ const osThreadAttr_t Debug_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for Lcd */
-osThreadId_t LcdHandle;
-const osThreadAttr_t Lcd_attributes = {
-  .name = "Lcd",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityLow,
-};
 /* Definitions for Key */
 osThreadId_t KeyHandle;
 const osThreadAttr_t Key_attributes = {
   .name = "Key",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
-};
-/* Definitions for IMU */
-osThreadId_t IMUHandle;
-const osThreadAttr_t IMU_attributes = {
-  .name = "IMU",
-  .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -115,9 +101,7 @@ void Chassis_Task(void *argument);
 void Tower_Task(void *argument);
 void Main_Task(void *argument);
 void Debug_Task(void *argument);
-void Lcd_Task(void *argument);
 void Key_Task(void *argument);
-void IMU_Task(void *argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -184,19 +168,8 @@ void MX_FREERTOS_Init(void) {
   /* creation of Debug */
   DebugHandle = osThreadNew(Debug_Task, NULL, &Debug_attributes);
 
-  /* creation of Lcd */
-  // LcdHandle = osThreadNew(Lcd_Task, NULL, &Lcd_attributes);
-  /* LCD 任务已取消：dvc_lcd.c 的 LCD_WR_DATA 是逐像素、一个字节一次
-   * HAL_SPI_Transmit 的忙等，一次数值刷新约 1.2 万次调用（15~30ms），
-   * 上电整屏 LCD_Fill 更是 13.4 万次。Lcd 和 Debug(HMI)/Key(蜂鸣器) 同为
-   * osPriorityLow，会把屏刷新和提示音一起拖卡。屏幕也已物理碎裂。
-   * 以后要用屏，把上面这行放开即可。 */
-
   /* creation of Key */
   KeyHandle = osThreadNew(Key_Task, NULL, &Key_attributes);
-
-  /* creation of IMU */
-  IMUHandle = osThreadNew(IMU_Task, NULL, &IMU_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
 
@@ -313,24 +286,6 @@ __weak void Debug_Task(void *argument)
   /* USER CODE END Debug_Task */
 }
 
-/* USER CODE BEGIN Header_Lcd_Task */
-/**
-* @brief Function implementing the Lcd thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_Lcd_Task */
-__weak void Lcd_Task(void *argument)
-{
-  /* USER CODE BEGIN Lcd_Task */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END Lcd_Task */
-}
-
 /* USER CODE BEGIN Header_Key_Task */
 /**
 * @brief Function implementing the Key thread.
@@ -347,24 +302,6 @@ __weak void Key_Task(void *argument)
     osDelay(1);
   }
   /* USER CODE END Key_Task */
-}
-
-/* USER CODE BEGIN Header_IMU_Task */
-/**
-* @brief Function implementing the IMU thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_IMU_Task */
-__weak void IMU_Task(void *argument)
-{
-  /* USER CODE BEGIN IMU_Task */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END IMU_Task */
 }
 
 /* Private application code --------------------------------------------------*/

@@ -37,7 +37,8 @@ typedef struct
     volatile uint32_t tick;      /* 收到时刻 HAL_GetTick()，ms */
     volatile uint32_t seq;       /* 每收到一帧有效位置 +1 */
     volatile uint32_t rx_cnt;    /* 该地址收到的帧数 */
-    volatile uint32_t ack_cnt;   /* 命令应答 02 */
+    volatile uint32_t ack_cnt;   /* 命令应答 02（不区分功能码） */
+    volatile uint32_t pos_ack_cnt; /* 位置命令(0xFD)的应答 02，用来确认电机真的收到了运动指令 */
     volatile uint32_t err_cnt;   /* E2/EE 或格式错误 */
     volatile uint8_t  last_code; /* 最近一帧功能码 */
     volatile uint8_t  last_dlc;
@@ -84,9 +85,10 @@ void Emm_V5_Vel_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, bo
 
 void Emm_V5_Stop_Now(uint8_t addr, bool snF);
 
-void Emm_V5_Pos_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, uint8_t raF, bool snF);
+/* 位置/角度命令：返回 false 表示多帧命令没有完整发出去，调用者应重发（绝对模式才幂等） */
+bool Emm_V5_Pos_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, uint8_t raF, bool snF);
 
-void Emm_V5_Angle_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint16_t angle, uint8_t raF, bool snF);
+bool Emm_V5_Angle_Control(uint8_t addr, uint8_t dir, uint16_t vel, uint8_t acc, uint16_t angle, uint8_t raF, bool snF);
 
 void Emm_V5_Synchronous_motion(uint8_t addr);
 
