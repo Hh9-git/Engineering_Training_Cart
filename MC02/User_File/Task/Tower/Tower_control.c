@@ -24,11 +24,6 @@ void Tower_Control_Init(void)
 {
     // 初始化舵机
     Servo_Init();
-// Tower_Control(30, 90, 1000, 100, 1000);
- 
-/* 复位姿态 */
-Tower_Target_Update(0, 50, 15);
-// Tower_SetClaw_Angle(45);  // 打开
 
 }
 

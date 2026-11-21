@@ -87,13 +87,13 @@ void Tower_Action_Run(void)
     {
         case TOWER_ACTION_RESET:
             /* 复位姿态 */
-            Tower_Target_Update(0, 50, 15);
+            Tower_Reset_Posture();
             current_step = ACTION_STEP_FINISHED;
             break;
 
         case TOWER_ACTION_IDENTIFY:
             /* 识别姿态 */
-            Tower_Target_Update(0, 100, 80);
+            Tower_Identify_Posture();
             current_step = ACTION_STEP_FINISHED;
             break;
 
@@ -110,4 +110,82 @@ void Tower_Action_Run(void)
         default:
             break;
     }
+}
+
+
+
+
+
+/**
+ * @brief 塔吊复位姿态
+ * @note 夹爪打开，云台、升降和伸缩机构回到初始位置
+ */
+ void Tower_Reset_Posture(void)
+{
+    /* 夹爪打开 */
+    Tower_Claw_on();
+
+    /* 塔吊机构回到复位位置 */
+    Tower_Target_Update(0, 70, 5);
+}
+
+
+/**
+ * @brief 塔吊识别姿态
+ * @note 云台回到中位，升降和伸缩机构移动到识别位置
+ */
+void Tower_Identify_Posture(void)
+{
+    /* 夹爪打开 */
+    Tower_Claw_on();
+
+    /* 塔吊机构移动到识别位置 */
+    Tower_Target_Update(0, 100,5);
+}
+
+
+typedef struct
+{
+    int16_t yaw;
+    int16_t telescope;
+} Tower_Material_Position_t;
+
+/* 左、中、右三个物料位置 */
+static Tower_Material_Position_t material_position[3] =
+{
+    { 0, 0 },  // 左侧：物料3
+    { 0, 0 },  // 中间：物料2
+    { 0, 0 }   // 右侧：物料1
+};
+
+/**
+ * @brief 地面抓取物料
+ * @param position 1左侧，2中间，3右侧
+ */
+void Tower_Grab_Ground(uint8_t position)
+{
+    if (position < 1 || position > 3)
+        return;
+
+    int16_t yaw = material_position[position - 1].yaw;
+    int16_t telescope = material_position[position - 1].telescope;
+
+    /* 1. 打开夹爪 */
+    Tower_Claw_on();
+
+    /* 2. 移动到物料上方 */
+    Tower_Target_Update(yaw, 100, telescope);
+    osDelay(1000);
+
+    /* 3. 下降到抓取高度 */
+    Tower_Target_Update(yaw, 35, telescope);
+    osDelay(1000);
+
+    /* 4. 闭合夹爪 */
+    Tower_Claw_off();
+    osDelay(500);
+
+    /* 5. 抬升到安全高度 */
+    Tower_Target_Update(yaw, 100, telescope);
+    osDelay(1000);
 }

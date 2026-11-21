@@ -1,4 +1,3 @@
-
 #include "Tower_task.h"
 #include "Tower_control.h"
 #include "Tower_action.h"
@@ -7,21 +6,29 @@
 void Tower_Init(void)
 {
     Tower_Control_Init();
+    Tower_Action_Init();
 }
-
 void Tower_Task(void *argument)
 {
     (void)argument;
 
     Tower_Init();
-    Tower_Claw_off();  // 夹爪闭合
+
+     
+
+    // /* 初始姿态 */
+    // Tower_Target_Update(0, 100, 5);
+    // Tower_Claw_on();
+
 
     for (;;)
     {
+        /* 底层电机和舵机控制 */
         Tower_Motor_Run();
-        osDelay(100);
+
+        /* 上层动作状态机 */
+        Tower_Action_Run();
+
+        osDelay(10);
     }
 }
-
-
-

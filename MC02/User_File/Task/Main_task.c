@@ -3,6 +3,9 @@
 #include "dvc_stepmotor.h"
 #include "bsp_buzzer.h"
 #include "bsp_ws2812.h"
+#include "Tower_task.h"
+#include "Tower_control.h"
+#include "Tower_action.h"
 
 
 void Main_Init(void)
@@ -75,6 +78,7 @@ void Main_Task(void *argument)
 	// Chassis_Go_Pos(-200,   200,   0, 0, 0);
 	// Chassis_Go_Pos(0,    0,   0, 0, 0);   /* 回启动区 */
 
+	Tower_Grab_Ground(2);  // 测试中间位置
 	for (;;)
 	{
 		/* vofa 输出已移到 Debug_Task（发送遥控器数据），这里保持空闲 */

@@ -42,4 +42,10 @@ void Tower_Claw_on(void);
 // 夹爪闭合
 void Tower_Claw_off(void);
 
+
+void Tower_Reset_Posture(void);
+void Tower_Identify_Posture(void);
+/* 地面抓取物料 */
+void Tower_Grab_Ground(uint8_t color);
+
 #endif
