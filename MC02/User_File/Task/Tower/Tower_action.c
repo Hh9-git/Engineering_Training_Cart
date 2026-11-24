@@ -14,9 +14,9 @@ void Tower_Target_Update(int16_t yaw,
 {
     Tower_Control(yaw,
                   lift,
-                  1000,
+                  3000,
                   telescope,
-                  1000);
+                  3000);
 }
 
 
@@ -126,8 +126,11 @@ void Tower_Action_Run(void)
     Tower_Claw_on();
 
     /* 塔吊机构回到复位位置 */
-    Tower_Target_Update(0, 70, 5);
+    Tower_Target_Update(0, 140, 5);
+    osDelay(1000);  // 等待机构移动到位
 }
+
+
 
 
 /**
@@ -140,23 +143,10 @@ void Tower_Identify_Posture(void)
     Tower_Claw_on();
 
     /* 塔吊机构移动到识别位置 */
-    Tower_Target_Update(0, 100,5);
+    Tower_Target_Update(0, 130, 5);
 }
 
 
-typedef struct
-{
-    int16_t yaw;
-    int16_t telescope;
-} Tower_Material_Position_t;
-
-/* 左、中、右三个物料位置 */
-static Tower_Material_Position_t material_position[3] =
-{
-    { 0, 0 },  // 左侧：物料3
-    { 0, 0 },  // 中间：物料2
-    { 0, 0 }   // 右侧：物料1
-};
 
 /**
  * @brief 地面抓取物料
@@ -164,28 +154,204 @@ static Tower_Material_Position_t material_position[3] =
  */
 void Tower_Grab_Ground(uint8_t position)
 {
-    if (position < 1 || position > 3)
-        return;
+    int16_t yaw;
+    int16_t telescope;
 
-    int16_t yaw = material_position[position - 1].yaw;
-    int16_t telescope = material_position[position - 1].telescope;
+    switch (position)
+    {
+        case 1:  // 左侧：物料3
+            yaw = 45;
+            telescope = 60;
+            break;
+
+        case 2:  // 中间：物料2
+            yaw = 0;
+            telescope = 0;
+            break;
+
+        case 3:  // 右侧：物料1
+            yaw = -45;
+            telescope = 60;
+            break;
+
+        default:
+            return;
+    }
 
     /* 1. 打开夹爪 */
     Tower_Claw_on();
+    osDelay(500);
 
-    /* 2. 移动到物料上方 */
-    Tower_Target_Update(yaw, 100, telescope);
-    osDelay(1000);
+    /* 2. 移动到物料上方
+     *    云台 100°/s，最坏情况从 -125° 转到 +45°（170°）要 1.7s */
+    Tower_Target_Update(yaw, 140, telescope);
+    osDelay(1800);
 
     /* 3. 下降到抓取高度 */
     Tower_Target_Update(yaw, 35, telescope);
-    osDelay(1000);
+    osDelay(1500);
 
     /* 4. 闭合夹爪 */
     Tower_Claw_off();
+    osDelay(1000);
+
+     /*5上升到转移高度 */
+    Tower_Target_Update(yaw, 140, telescope);
+    osDelay(100);
+
+
+}
+
+
+
+
+/**
+ * @brief 将物料放置到地面
+ * @param position 1左侧，2中间，3右侧
+ */
+void Tower_Put_Ground(uint8_t position)
+{
+    int16_t yaw;
+    int16_t telescope;
+
+    /* 1. 根据位置选择放置坐标 */
+    switch (position)
+    {
+        case 1:  // 左侧
+            yaw = 45;
+            telescope = 70;
+            break;
+
+        case 2:  // 中间
+            yaw = 0;
+            telescope = 0;
+            break;
+
+        case 3:  // 右侧
+            yaw = -45;
+            telescope = 70;
+            break;
+
+        default:
+            return;
+    }
+
+    /* 2. 移动到放置位置上方（云台 100°/s，满行程 2.7s） */
+    Tower_Target_Update(yaw, 140, telescope);
+    osDelay(1800);
+
+    /* 3. 下降到放置高度 */
+    Tower_Target_Update(yaw, 35, telescope);
+    osDelay(1000);
+
+    /* 4. 打开夹爪，释放物料 */
+    Tower_Claw_on();
     osDelay(500);
 
     /* 5. 抬升到安全高度 */
-    Tower_Target_Update(yaw, 100, telescope);
+    Tower_Target_Update(yaw, 140, telescope);
+    osDelay(1000);
+
+
+}
+
+/**
+ * @brief 将物料放置到车上托盘
+ * @param order 1、2、3号放置位置
+ */
+void Tower_Put_Car(uint8_t order)
+{
+    if (order < 1 || order > 3)
+        return;
+
+    switch (order)
+    {
+        case 1:
+            Tower_SetTray_Angle(135);
+            break;
+        case 2: 
+            Tower_SetTray_Angle(0);
+            break;
+        case 3:
+            Tower_SetTray_Angle(-110);
+            break;
+        default:
+            break;
+    }    
+    osDelay(1000);
+
+
+   /* 5. 抬升到安全高度（云台从上一位置转到 -125° 最多 170°） */
+    Tower_Target_Update(-125, 140, 45);
+    osDelay(1800);
+
+
+    /* 3. 打开夹爪，释放物料 */
+    Tower_Claw_on();
+    osDelay(1000);
+
+}
+
+
+/**
+ * @brief 从车上托盘抓取物料
+ * @param order 1、2、3号抓取位置
+ */
+void Tower_Grab_Tray(uint8_t order)
+{
+    if (order < 1 || order > 3)
+        return;
+    
+        /* 2. 打开夹爪 */
+    Tower_Claw_on();
+    osDelay(100);
+
+        osDelay(1000);
+    /* 3. 移动到转盘物料抓取位置 */
+    Tower_Target_Update(-125, 140, 40);  // 暂定位置
+    //  /* 5. 抬升到安全高度 */
+    // Tower_Target_Update(-125, 140, 60);
+    osDelay(1000);
+
+   
+    /* 1. 转盘转到对应物料位置 */
+    switch (order)
+    {
+        case 1:
+            Tower_SetTray_Angle(135);
+            break;
+
+        case 2:
+            Tower_SetTray_Angle(0);
+            break;
+
+        case 3:
+            Tower_SetTray_Angle(-110);
+            break;
+
+        default:
+            return;
+    }
+
+    osDelay(1000);
+
+
+      /* 3. 移动到转盘物料抓取位置 */
+    Tower_Target_Update(-125, 110, 40);  // 暂定位置
+    osDelay(800);
+
+    /* 4. 闭合夹爪，抓取物料 */
+    Tower_Claw_off();
+    osDelay(1000);
+
+    /* 5. 抬升到安全高度 */
+    Tower_Target_Update(-125, 140, 50);
     osDelay(1000);
 }
+
+
+//摄像头画面中的目标中心点（320, 230）对应的坐标
+#define center_x 320
+#define center_y 230
+
+

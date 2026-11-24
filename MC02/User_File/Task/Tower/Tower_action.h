@@ -46,6 +46,12 @@ void Tower_Claw_off(void);
 void Tower_Reset_Posture(void);
 void Tower_Identify_Posture(void);
 /* 地面抓取物料 */
-void Tower_Grab_Ground(uint8_t color);
+void Tower_Grab_Ground(uint8_t position);
+
+void Tower_Put_Car(uint8_t order);
+
+void Tower_Grab_Tray(uint8_t order);
+
+void Tower_Put_Ground(uint8_t position);
 
 #endif

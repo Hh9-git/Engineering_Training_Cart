@@ -59,18 +59,10 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
         }
 }
 
-/* 帧错误/噪声/溢出都会进这里。HAL 的处理是"停掉接收 DMA 然后回调"，
- * 而弱定义的 HAL_UART_ErrorCallback 是空的 —— 也就是说线上抖一下，
- * 这块串口从此再也收不到数据（表现为"发了没反应"，而且不报错）。
- * 这里只记下是哪个串口，真正的重挂交给任务做：
- * 中断里此刻 DMA abort 可能还没走完，直接重启会拿到 HAL_BUSY。 */
 static UART_HandleTypeDef *UART_RxError_Source = NULL;
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
-    /* YIS320 走单字节中断：ORE 后 HAL 会停掉接收，
-     * 而且 ORE 与 RXNE 同时置位时错误分支会把刚重挂好的接收再停一次，
-     * 所以必须在这里补挂，不能只靠 RxCplt。 */
     if (huart->Instance == USART10)
     {
         IMU_OnUartError(huart->ErrorCode);

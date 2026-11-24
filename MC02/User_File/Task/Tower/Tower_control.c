@@ -8,11 +8,11 @@
 static Tower_Motor_Target_t lift_target = {0};
 static Tower_Motor_Target_t telescope_target = {0};
 
-static int16_t gimbal_target_angle = 0;
-static uint8_t gimbal_update_flag = 0;
-
 static int16_t claw_target_angle = 0;
 static uint8_t claw_update_flag = 0;
+
+static int16_t tray_target_angle = 0;
+static uint8_t tray_update_flag = 0;
 
 
 static bool Tower_Update_Lift(void);
@@ -27,9 +27,12 @@ void Tower_Control_Init(void)
 
 }
 
-
-
-
+// 转盘舵机目标角度设置：只保存目标
+void Tower_SetTray_Angle(int16_t angle)
+{
+    tray_target_angle = angle;
+    tray_update_flag = 1;
+}
 // 夹爪舵机目标角度设置：只保存目标
 void Tower_SetClaw_Angle(int16_t angle)
 {
@@ -37,20 +40,20 @@ void Tower_SetClaw_Angle(int16_t angle)
     claw_update_flag = 1;
 }
 
-// 云台绝对角度控制，angle 表示云台相对于舵机设定中位（0°）的目标角度
+// 云台目标角度设置
 void Tower_SetGimbal_Angle(int16_t angle)
 {
-    gimbal_target_angle = angle;
-    gimbal_update_flag = 1;
+    Set_Gimbal_Angle(angle);
 }
+
 // 升降机构绝对位置控制：只保存目标参数
 void Tower_SetLift_Pos(int16_t target_pos,
                        uint16_t speed,
                        uint8_t acc)
 {
     // 限制运动范围，以齿条为界
-    if (target_pos > 130)
-        target_pos = 130;
+    if (target_pos > 140)
+        target_pos = 140;
 
     if (target_pos < 20)
         target_pos = 20;
@@ -73,8 +76,8 @@ void Tower_SetTelescope_Pos(int16_t target_pos,
     if (target_pos > 130)
         target_pos = 130;
 
-    if (target_pos < 5)
-        target_pos = 5;
+    if (target_pos < 0)
+        target_pos = 0;
 
     // 保存目标参数
     telescope_target.target_pos = target_pos;
@@ -95,26 +98,31 @@ void Tower_Control(uint32_t yaw,
     Tower_SetGimbal_Angle((int16_t)yaw);
 
     // 升降机构 ID5：设置目标位置
-    Tower_SetLift_Pos((int16_t)z, z_speed, 0);
+    Tower_SetLift_Pos((int16_t)z, z_speed, 220);
 
     // 伸缩机构 ID6：设置目标位置
-    Tower_SetTelescope_Pos((int16_t)y, y_speed, 0);
+    Tower_SetTelescope_Pos((int16_t)y, y_speed, 20);
 }
 
 // Tower 电机周期运行函数
 void Tower_Motor_Run(void)
 {
 
-     // 云台舵机控制
-    if (gimbal_update_flag)
+
+    // 转盘舵机控制
+    if (tray_update_flag)
     {
-        Set_Gimbal_Angle(gimbal_target_angle);
-        gimbal_update_flag = 0;
+        Set_Tray_Angle(tray_target_angle);
+        tray_update_flag = 0;
     }
+
+     // 云台插值控制：每个周期都调用
+    Servo_Gimbal_Update();
 
     // 夹爪舵机控制
     if (claw_update_flag)
     {
+
         Set_Claw_Angle(claw_target_angle);
         claw_update_flag = 0;
     }

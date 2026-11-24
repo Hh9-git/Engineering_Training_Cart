@@ -27,7 +27,8 @@ typedef enum
     VELOCITY_MODE,
     POSITION_MODE,
     SPIN_DRIFT_MODE,
-    ROTATE_MODE
+    ROTATE_MODE,
+    CHASSIS_LOCK_MODE          // 只发零速，抱死底盘（不读 yaw、不跑 PID）
 } Chassis_CtrlMode_e;
 typedef struct
 {
@@ -85,5 +86,6 @@ void Chassis_Odometry_Update(void);
 void Chassis_ResetPos(void);
 
 void Chassis_Rotate(float target);
+void Chassis_Lock(void);
 
 #endif // CHASSIS_TASK_H

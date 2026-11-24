@@ -22,7 +22,7 @@ void Chassis_Init(void)
     AttachInterrupt_FDCAN(&hfdcan1, ZDT_CAN_Callback);
 
     chassis.accel_K = 50;
-    chassis.ctrlMode = VELOCITY_MODE;
+    chassis.ctrlMode = CHASSIS_LOCK_MODE;   // 上电即锁定，防止 yaw 扰动带动轮子
 
     PID_Init(&chassis.PID_angle, 2.0f, 0.0f, 0.0f, 100.0f, 20.0f);
     PID_Init(&chassis.PID_x, 0.5f, 0.0f, 0.0f, 150.0f, 20.0f);
@@ -136,6 +136,13 @@ static void Chassis_Accel_Update(void)
 //负责控制逻辑和速度计算
 void Chassis_Update(void)
 {
+    /* 锁死模式：不读 yaw、不跑 PID，只每周期重发零速保持抱死 */
+    if (chassis.ctrlMode == CHASSIS_LOCK_MODE)
+    {
+        Chassis_Move(0, 0, 0);
+        return;
+    }
+
     float yaw = IMU_getYaw();
     float theta = yaw * CHASSIS_PI / 180.0f;
 
@@ -369,6 +376,30 @@ void Chassis_Rotate(float target)
 
     // 清除 PID 历史状态
     Chassis_clear();
+}
+
+/**
+ * @brief 锁死底盘：不跟航向、不平移，每个控制周期发送零速保持抱死
+ * @note  需要恢复时直接调用 Chassis_SetVel / Chassis_SetPos / Chassis_Rotate 等，
+ *        它们会改写 ctrlMode，加速起点从已清零的 nowV 开始。
+ */
+void Chassis_Lock(void)
+{
+    chassis.setVx = 0.0f;
+    chassis.setVy = 0.0f;
+    chassis.setVw = 0.0f;
+
+    chassis.nowVx = 0.0f;
+    chassis.nowVy = 0.0f;
+
+    startVx = 0.0f;
+    startVy = 0.0f;
+    chassis.accel_count = 0;
+
+    Chassis_clear();
+
+    /* 最后写模式：被 Chassis 任务抢占时也只会是"旧模式 + 零目标" */
+    chassis.ctrlMode = CHASSIS_LOCK_MODE;
 }
 
 /**

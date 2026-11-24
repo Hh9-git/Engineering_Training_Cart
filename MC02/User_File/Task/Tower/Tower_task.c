@@ -13,14 +13,7 @@ void Tower_Task(void *argument)
     (void)argument;
 
     Tower_Init();
-
-     
-
-    // /* 初始姿态 */
-    // Tower_Target_Update(0, 100, 5);
-    // Tower_Claw_on();
-
-
+    
     for (;;)
     {
         /* 底层电机和舵机控制 */

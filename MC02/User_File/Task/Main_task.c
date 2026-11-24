@@ -1,5 +1,6 @@
 #include "Main_task.h"
 #include "Chassis_task.h"
+#include "Tower/Tower_action.h"
 #include "dvc_stepmotor.h"
 #include "bsp_buzzer.h"
 #include "bsp_ws2812.h"
@@ -11,8 +12,8 @@
 void Main_Init(void)
 {
 	/* 启动提示音：上行三音琶音，表示系统就绪 */
-    Buzzer_Init();
-    Buzzer_StartupSound();
+    // Buzzer_Init();
+    // Buzzer_StartupSound();
 }
 
 void Main_Task(void *argument)
@@ -78,10 +79,40 @@ void Main_Task(void *argument)
 	// Chassis_Go_Pos(-200,   200,   0, 0, 0);
 	// Chassis_Go_Pos(0,    0,   0, 0, 0);   /* 回启动区 */
 
-	Tower_Grab_Ground(2);  // 测试中间位置
+    Tower_Action_Start(TOWER_ACTION_RESET);  // 启动时先复位塔吊姿态
+
+
+
+	// osDelay(1000);  // 等待机构移动到位
+    // Chassis_Lock();
+
+
+
+	
+
+
+	// Tower_Grab_Tray(2);  // 测试抓取中间位置
+	// Tower_Put_Ground(2);  // 测试放置中间位置
+
+	// Tower_Grab_Tray(1);  // 测试抓取中间位置
+	// Tower_Put_Ground(1);  // 测试放置中间位置
+
+	// Tower_Grab_Tray(3);  // 测试抓取中间位置
+	// Tower_Put_Ground(3);  // 测试放置中间位置
+
+
+
+	// Tower_Grab_Ground(1);  // 测试抓取中间位置
+	// Tower_Put_Car(1);  // 测试放置中间位置
+
+	// Tower_Grab_Ground(2);  // 测试抓取左侧位置
+	// Tower_Put_Car(2);  // 测试放置左侧位置
+
+	// Tower_Grab_Ground(3);  // 测试抓取右侧位置
+	// Tower_Put_Car(3);  // 测试放置右侧位置
 	for (;;)
 	{
-		/* vofa 输出已移到 Debug_Task（发送遥控器数据），这里保持空闲 */
-		osDelay(100);       /* 序列跑完就停在这里 */
+		
+		osDelay(100);
 	}
 }

@@ -28,6 +28,8 @@ void Tower_Control(uint32_t yaw,
                    uint16_t z_speed,
                    uint32_t y,
                    uint16_t y_speed);
+                   
+void Tower_SetTray_Angle(int16_t angle);
 void Tower_SetGimbal_Angle(int16_t angle);
 void Tower_SetClaw_Angle(int16_t angle);
 
